@@ -5,7 +5,7 @@
 
 ## 下载与安装
 
-1. 打开 [Releases](https://github.com/2432448868/desktop-tidy/releases)，选择最新预览版。
+1. 打开 [Releases](https://github.com/KellonWww/desktop-tidy/releases)，选择最新预览版。
 2. 下载 **DesktopTidy-v0.1.0-preview-win-x64.zip**，不要下载 Source code 压缩包。
 3. 右键 ZIP → 全部解压，将整个目录放在固定位置，例如 `D:/Apps/DesktopTidy`。
 4. 双击 `DesktopTidy.exe`，保留同目录的 `DesktopTidy.exe.config`。
