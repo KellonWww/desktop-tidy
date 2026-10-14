@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+
+bin/
+obj/
+.vs/
+
+# Local credentials, diagnostics and personal desktop data
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local
+*.log
+*.dmp
+*.pdb
+.vscode/
+.idea/
