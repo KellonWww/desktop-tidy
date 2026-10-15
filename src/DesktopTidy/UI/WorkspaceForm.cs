@@ -31,10 +31,51 @@ namespace DesktopTidy.UI
         }
     }
 
+    // Editorial heading and fine rule shared with the personal blog.
+    internal sealed class WorkspaceHeading : Control
+    {
+        private readonly WorkspaceController owner;
+        private readonly Font headingFont = new Font("Microsoft YaHei UI", 19F, FontStyle.Bold);
+        private readonly Font captionFont = new Font("Microsoft YaHei UI", 9F);
+        private Theme theme = Theme.Read();
+        internal WorkspaceHeading(WorkspaceController owner)
+        {
+            this.owner = owner; Dock = DockStyle.Top; Height = 100;
+            AccessibleName = "桌面工作区概览";
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+        internal void SetTheme(Theme value) { theme = value; BackColor = value.Background; Invalidate(); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var flags = TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            TextRenderer.DrawText(e.Graphics, owner.SearchActive ? "搜索结果" : "我的桌面", headingFont,
+                new Rectangle(16, 15, Math.Max(1, Width - 32), 38), theme.Text, flags);
+            string detail = owner.SearchActive ? string.Format("{0} / {1} 个图标匹配", owner.SearchMatchCount, owner.ItemCount)
+                : string.Format("{0} 个分类  ·  {1} 个图标  ·  原文件留在原处", owner.Categories.Count, owner.ItemCount);
+            TextRenderer.DrawText(e.Graphics, detail, captionFont, new Rectangle(18, 59, Math.Max(1, Width - 36), 24), theme.Muted, flags);
+            if (Width >= 560)
+            {
+                var badge = new Rectangle(Width - 126, 22, 108, 28);
+                SurfaceDrawing.Fill(e.Graphics, badge, 10, theme.AccentSoft);
+                TextRenderer.DrawText(e.Graphics, SystemInformation.HighContrast ? "系统高对比" : theme.Dark ? "夜航 / 深色" : "日光 / 浅色", captionFont, badge, SystemInformation.HighContrast ? theme.AccentText : theme.Accent,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            }
+            using (var pen = new Pen(theme.Stroke)) e.Graphics.DrawLine(pen, 16, Height - 1, Math.Max(16, Width - 18), Height - 1);
+        }
+        protected override void Dispose(bool disposing)
+        { if (disposing) { headingFont.Dispose(); captionFont.Dispose(); } base.Dispose(disposing); }
+    }
+
     internal sealed class WorkspaceForm : Form
     {
         private readonly WorkspaceController owner;
         private readonly Font titleFont, detailFont;
+        private readonly WorkspaceHeading heading;
+        private WebWorkspace web;
+        private Panel nativeContent;
+        private readonly Timer webGesture = new Timer { Interval = 16 };
+        private bool webStarted;
         private Theme sidebarTheme = Theme.Read();
         private readonly WorkspaceCanvas canvas = new WorkspaceCanvas { AutoScroll = false };
         private readonly WorkspaceViewport viewport;
@@ -60,7 +101,7 @@ namespace DesktopTidy.UI
         internal WorkspaceForm(WorkspaceController owner, Font font)
         {
             this.owner = owner; Font = font;
-            titleFont = new Font(font.FontFamily, 14F, FontStyle.Bold);
+            titleFont = new Font("Segoe UI", 26F, FontStyle.Bold);
             detailFont = new Font(font.FontFamily, 9F); search.Font = font; searchSummary.Font = detailFont; Icon = AppBrand.Icon; Text = "桌面整理 · 工作区";
             AccessibleName = Text; FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual; ShowInTaskbar = false; TopMost = false;
@@ -74,10 +115,14 @@ namespace DesktopTidy.UI
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             viewport = new WorkspaceViewport(canvas) { Dock = DockStyle.Fill };
             sidebarViewport = new WorkspaceViewport(sidebar) { Dock = DockStyle.Left, Width = 226 };
-            Controls.Add(viewport); Controls.Add(feedback); Controls.Add(sidebarViewport);
+            heading = new WorkspaceHeading(owner);
+            var content = new Panel { Dock = DockStyle.Fill }; nativeContent = content;
+            content.Controls.Add(viewport); content.Controls.Add(heading);
+            Controls.Add(content); Controls.Add(feedback); Controls.Add(sidebarViewport);
             viewport.SizeChanged += delegate { if (!resizing) owner.ReflowGroups(false); };
-            var header = new Label { Text = "工作区", Font = titleFont, Width = 164, Height = 28, Margin = new Padding(0, 0, 0, 4), Cursor = Cursors.SizeAll, AccessibleName = "拖动工作区" };
+            var header = new Label { Text = "Tidy.", Font = titleFont, Width = 164, Height = 54, Margin = new Padding(0), Cursor = Cursors.SizeAll, AccessibleName = "拖动工作区" };
             WireGesture(header, false); sidebar.Controls.Add(header);
+            sidebar.Controls.Add(new Label { Text = "桌面整理 / 本地工作区", Tag = "muted", Font = detailFont, Width = 164, Height = 22, Margin = new Padding(0, 0, 0, 20) });
             sidebar.Controls.Add(new Label { Text = "搜索  /  Ctrl+F", Tag = "muted", Font = detailFont, Width = 164, Height = 18, Margin = new Padding(0, 0, 0, 2) });
             search.Text = owner.SearchText;
             search.TextChanged += delegate { owner.SetSearch(search.Text); };
@@ -90,7 +135,7 @@ namespace DesktopTidy.UI
             {
                 Theme palette = sidebarTheme;
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                SurfaceDrawing.Outline(e.Graphics, new Rectangle(1, 1, searchRow.Width - 3, searchRow.Height - 3), 7, search.Focused ? palette.Accent : palette.Stroke);
+                SurfaceDrawing.Outline(e.Graphics, new Rectangle(1, 1, searchRow.Width - 3, searchRow.Height - 3), 10, search.Focused ? palette.Accent : palette.StrongStroke);
             };
             search.GotFocus += delegate { searchRow.Invalidate(); };
             search.LostFocus += delegate { searchRow.Invalidate(); };
@@ -111,7 +156,7 @@ namespace DesktopTidy.UI
             settingsButton = AddButton("设置", ShowSettings); settingsButton.ToolGlyph = "settings"; settingsButton.MenuIndicator = true; settingsButton.AccessibleName = "工作区设置";
             sidebarTips.SetToolTip(countSortButton, "按全部图标数量排序，不按搜索匹配数；排序前清除搜索；一次性动作，可撤销");
             sidebarTips.SetToolTip(search, "仅按图标名称搜索；Esc或×返回全部分类，搜索不会保存为布局");
-            sidebarTips.SetToolTip(organizeButton, "分类框排列、名称排列、撤销");
+            sidebarTips.SetToolTip(organizeButton, "分类框排列、恢复默认位置、撤销");
             sidebarTips.SetToolTip(settingsButton, "不透明度、启动设置、分类管理");
             var hideButton = AddButton("收起", owner.RequestHide); hideButton.ToolGlyph = "hide";
             hideButton.AccessibleName = "隐藏工作区，确认后从托盘恢复";
@@ -193,6 +238,12 @@ namespace DesktopTidy.UI
         {
             if (!PrepareDesktop()) return false;
             Show(); RestoreCards();
+            if (!webStarted)
+            {
+                webStarted = true;
+                try { web = new WebWorkspace(owner, this); Controls.Add(web); web.SendToBack(); web.Initialize(); }
+                catch (Exception) { WebFailed("网页工作区不可用，继续使用原生界面。"); }
+            }
             if (!desktopRequested || !Visible) return false;
             hostWatch.Start(); return true;
         }
@@ -269,22 +320,55 @@ namespace DesktopTidy.UI
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { if (settingsMenu != null) settingsMenu.Dispose(); if (organizeMenu != null) organizeMenu.Dispose(); sidebarTips.Dispose(); desktopRequested = false; hostWatch.Stop(); hostWatch.Dispose(); titleFont.Dispose(); detailFont.Dispose(); }
+            if (disposing) { if (settingsMenu != null) settingsMenu.Dispose(); if (organizeMenu != null) organizeMenu.Dispose(); webGesture.Dispose(); sidebarTips.Dispose(); desktopRequested = false; hostWatch.Stop(); hostWatch.Dispose(); titleFont.Dispose(); detailFont.Dispose(); }
             base.Dispose(disposing);
         }
-        internal void ClearSearch() { search.Clear(); }
-        internal void FocusSearch() { sidebarViewport.ScrollTo(Point.Empty); search.Focus(); search.SelectAll(); }
+        internal void WebReady()
+        {
+            nativeContent.Visible = false; sidebarViewport.Visible = false; feedback.Visible = false;
+        }
+        internal void WebFailed(string message)
+        {
+            if (IsDisposed) return;
+            nativeContent.Visible = true; sidebarViewport.Visible = true; feedback.Visible = true;
+            if (web != null) web.Visible = false;
+            search.Text = owner.SearchText; SetFeedback(message); RestoreCards();
+        }
+        internal void RefreshWebIcons() { if (web != null) web.RefreshIcons(); }
+        internal void BeginWebGesture(bool resize)
+        {
+            if (!desktopRequested || webGesture.Enabled) return;
+            gestureStart = Cursor.Position; gestureBounds = desktopBounds; resizing = resize; moving = !resize;
+            webGesture.Tick -= WebGestureTick; webGesture.Tick += WebGestureTick; webGesture.Start();
+        }
+        private void WebGestureTick(object sender, EventArgs e)
+        {
+            if (!desktopRequested || (Control.MouseButtons & MouseButtons.Left) == 0)
+            {
+                webGesture.Stop(); bool changed = resizing; moving = resizing = false;
+                PersistBounds(); if (changed) owner.ReflowGroups(true, true); return;
+            }
+            Point delta = new Point(Cursor.Position.X - gestureStart.X, Cursor.Position.Y - gestureStart.Y);
+            Rectangle next = gestureBounds;
+            if (resizing) next.Size = new Size(Math.Max(MinimumSize.Width, next.Width + delta.X), Math.Max(MinimumSize.Height, next.Height + delta.Y));
+            else next.Offset(delta);
+            next = WorkspaceController.FitWorkspaceBounds(next, Screen.FromPoint(Cursor.Position).WorkingArea);
+            if (DesktopAttachment.Position(this, next)) desktopBounds = next;
+        }
+        internal void ClearSearch() { search.Clear(); owner.SetSearch(string.Empty); }
+        internal void FocusSearch() { if (web != null && web.Ready) { web.FocusSearch(); return; } sidebarViewport.ScrollTo(Point.Empty); search.Focus(); search.SelectAll(); }
         internal void UpdateSearchSummary()
         {
             searchSummary.Text = owner.SearchActive ? string.Format("{0} / {1} 项匹配\n{2}", owner.SearchMatchCount, owner.ItemCount, owner.LastRefreshDescription) : string.Format("{0} 个图标\n{1}", owner.ItemCount, owner.LastRefreshDescription);
             searchSummary.AccessibleName = owner.SearchActive ? "搜索结果" : "图标总数与排列状态";
             searchSummary.AccessibleDescription = searchSummary.Text;
+            if (heading != null) heading.Invalidate();
             sidebarTips.SetToolTip(searchSummary, searchSummary.Text + "；" + owner.OrderDescription + "；数量排序始终基于全部图标");
             if (clearSearchButton != null) clearSearchButton.Enabled = owner.SearchActive;
         }
         internal void SetFeedback(string text)
         {
-            feedback.Text = text; feedback.AccessibleDescription = text;
+            feedback.Text = text; feedback.AccessibleDescription = text; if (web != null) web.Feedback(text);
             sidebarTips.SetToolTip(feedback, text + "\n撤销上次修改：Ctrl+Z，或排列菜单");
         }
         internal void SyncRefresh()
@@ -306,6 +390,7 @@ namespace DesktopTidy.UI
             menu.Items.Add(new ToolStripMenuItem("数量排序仅执行一次；拖动后为自定义") { Enabled = false });
             menu.Items.Add("紧凑排列", null, delegate { owner.ArrangeGroups(); });
             menu.Items.Add("名称排列", null, delegate { owner.ArrangeItems(null); });
+            menu.Items.Add("恢复默认位置", null, delegate { owner.ResetLayout(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("撤销", null, delegate { owner.Undo(); }) { ShortcutKeyDisplayString = "Ctrl+Z" });
             return menu;
@@ -327,6 +412,11 @@ namespace DesktopTidy.UI
                 choice.Click += delegate { owner.CommitOpacity(value); }; transparency.DropDownItems.Add(choice);
             }
             menu.Items.Add(transparency);
+            var theme = Theme.Read();
+            var darkTheme = new ToolStripMenuItem("深色主题") { Checked = theme.Dark, Enabled = !theme.HighContrast };
+            darkTheme.Click += delegate { owner.SetThemeOverride(!Theme.Read().Dark); }; menu.Items.Add(darkTheme);
+            var followTheme = new ToolStripMenuItem("跟随 Windows 应用模式") { Checked = theme.FollowsSystem, Enabled = !theme.HighContrast };
+            followTheme.Click += delegate { owner.SetThemeOverride(null); }; menu.Items.Add(followTheme);
             var startup = new ToolStripMenuItem("启动时隐藏原生桌面图标") { Checked = owner.HideIconsOnStartup };
             startup.Click += delegate { owner.SetStartupHiding(!owner.HideIconsOnStartup); }; menu.Items.Add(startup);
             menu.Items.Add("桌面图标显隐", null, delegate { owner.ToggleDesktopIcons(); });
@@ -341,7 +431,7 @@ namespace DesktopTidy.UI
                 Category category = value;
                 var entry = new ToolStripMenuItem(owner.CategoryTitle(category));
                 entry.DropDownItems.Add("重命名…", null, delegate { owner.RenameCategory(category); });
-                if (category > Category.Other) entry.DropDownItems.Add("删除分类（不删文件）…", null, delegate { owner.DeleteCategory(category); });
+                entry.DropDownItems.Add("删除分类（不删文件）…", null, delegate { owner.DeleteCategory(category); });
                 categories.DropDownItems.Add(entry);
             }
             menu.Items.Add(categories);
@@ -357,11 +447,11 @@ namespace DesktopTidy.UI
         }
         private void AddSection(string text)
         {
-            sidebar.Controls.Add(new Label { Text = text, Tag = "muted", Font = detailFont, Width = 164, Height = 18, Margin = new Padding(0) });
+            sidebar.Controls.Add(new Label { Text = text, Tag = "muted", Font = detailFont, Width = 164, Height = 20, Margin = new Padding(0, 12, 0, 6) });
         }
         private RoundedButton AddButton(string text, Action click)
         {
-            var button = new RoundedButton { Text = text, AccessibleName = text, Width = 164, Height = 28, Margin = new Padding(0), Secondary = true, Quiet = true };
+            var button = new RoundedButton { Text = text, AccessibleName = text, Width = 164, Height = 34, Margin = new Padding(0, 0, 0, 2), Secondary = true, Quiet = true };
             button.Click += delegate { click(); }; sidebar.Controls.Add(button); return button;
         }
         internal void SyncCommands()
@@ -398,9 +488,10 @@ namespace DesktopTidy.UI
         internal void RefreshTheme()
         {
             Theme theme = Theme.Read(); sidebarTheme = theme; BackColor = theme.Background; ForeColor = theme.Text;
+            heading.SetTheme(theme);
             canvas.BackColor = theme.Background; viewport.SetTheme(theme); canvas.SetTheme(theme); sidebarViewport.SetTheme(theme, theme.Surface);
             ApplySidebarTheme(sidebar, theme);
-            feedback.BackColor = theme.Surface; feedback.ForeColor = theme.Text;
+            feedback.BackColor = theme.Background; feedback.ForeColor = theme.Muted;
             ApplyOpacity(owner.OpacityPercent); Invalidate();
         }
     }

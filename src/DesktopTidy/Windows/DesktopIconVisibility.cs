@@ -123,6 +123,7 @@ namespace DesktopTidy.Windows
         }
         internal bool RestoreForExit()
         {
+            if (hidden == IntPtr.Zero) return true;
             if (!ShowIconsForExit(hidden, shellProcess)) return false;
             hidden = IntPtr.Zero; ReleaseGuardian(); return true;
         }
@@ -151,6 +152,18 @@ namespace DesktopTidy.Windows
             catch (ArgumentException) { return ShowIconsForExit(window, process) ? 0 : 1; }
             catch (WaitHandleCannotBeOpenedException) { return 2; }
         }
-        public void Dispose() { RestoreForExit(); }
+        public void Dispose()
+        {
+            if (hidden == IntPtr.Zero) { ReleaseGuardian(); return; }
+            if (guardian != null && !guardian.HasExited)
+            {
+                // Let the already-running recovery process restore icons after this process exits.
+                hidden = IntPtr.Zero;
+                if (stop != null) { stop.Dispose(); stop = null; }
+                guardian.Dispose(); guardian = null;
+                return;
+            }
+            RestoreForExit();
+        }
     }
 }

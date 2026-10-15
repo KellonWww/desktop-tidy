@@ -7,25 +7,36 @@ if [[ ! -f "$csc" ]]; then printf '%s\n' '未找到 Framework x64 编译器，�
 builddir="${BUILD_DIR:-build/prototype}"
 mkdir -p "$builddir"
 winpath() { cygpath -w "$1"; }
+python scripts/prepare-web.py --output "$builddir"
+webrefs=("-r:$(winpath build/web-deps/sdk/Microsoft.Web.WebView2.Core.dll)" "-r:$(winpath build/web-deps/sdk/Microsoft.Web.WebView2.WinForms.dll)" -r:System.Web.Extensions.dll)
 "$csc" -nologo -target:winexe -platform:x64 -optimize+ -warn:4 -warnaserror+ \
   "-out:$(winpath $builddir/DesktopTidy.exe)" "-win32manifest:$(winpath src/DesktopTidy/app.manifest)" \
-  -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Runtime.Serialization.dll \
+  "${webrefs[@]}" -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Runtime.Serialization.dll \
   "-win32icon:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico)" "-resource:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico),DesktopTidy.AppIcon" "$(winpath src/DesktopTidy/UI/AppBrand.cs)" "$(winpath src/DesktopTidy/Program.cs)" "$(winpath src/DesktopTidy/TrayApplicationContext.cs)" \
-  "$(winpath src/DesktopTidy/UI/MainForm.cs)" "$(winpath src/DesktopTidy/UI/DesktopListControl.cs)" "$(winpath src/DesktopTidy/UI/Theme.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceChrome.cs)" "$(winpath src/DesktopTidy/UI/SurfaceDrawing.cs)" \
-  "$(winpath src/DesktopTidy/Core/Classification.cs)" "$(winpath src/DesktopTidy/Core/LayoutStore.cs)" "$(winpath src/DesktopTidy/Core/WorkspaceController.cs)" "$(winpath src/DesktopTidy/UI/ClassificationBox.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceForm.cs)" "$(winpath src/DesktopTidy/Windows/DesktopIconVisibility.cs)" "$(winpath src/DesktopTidy/Windows/DesktopAttachment.cs)" "$(winpath src/DesktopTidy/Windows/ShellIconCache.cs)" \
+  "$(winpath src/DesktopTidy/UI/DesktopListControl.cs)" "$(winpath src/DesktopTidy/UI/Theme.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceChrome.cs)" "$(winpath src/DesktopTidy/UI/SurfaceDrawing.cs)" \
+  "$(winpath src/DesktopTidy/Core/ApplicationClassifier.cs)" "$(winpath src/DesktopTidy/Core/Classification.cs)" "$(winpath src/DesktopTidy/Core/LayoutStore.cs)" "$(winpath src/DesktopTidy/Core/WorkspaceController.cs)" "$(winpath src/DesktopTidy/UI/ClassificationBox.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceForm.cs)" "$(winpath src/DesktopTidy/UI/WebWorkspace.cs)" "$(winpath src/DesktopTidy/Windows/DesktopIconVisibility.cs)" "$(winpath src/DesktopTidy/Windows/DesktopAttachment.cs)" "$(winpath src/DesktopTidy/Windows/ShellIconCache.cs)" \
   "$(winpath src/DesktopTidy/Windows/DesktopReader.cs)" "$(winpath src/DesktopTidy/Windows/NativeMethods.cs)"
 "$csc" -nologo -target:exe -platform:x64 -optimize+ -warn:4 -warnaserror+ \
   "-out:$(winpath $builddir/MemoryProbe.exe)" "-win32manifest:$(winpath src/DesktopTidy/app.manifest)" -r:System.dll -r:System.Core.dll -r:System.Runtime.Serialization.dll \
   "$(winpath tools/MemoryProbe/Program.cs)"
 "$csc" -nologo -target:exe -platform:x64 -optimize+ -warn:4 -warnaserror+ -main:WorkspaceTests \
   "-out:$(winpath $builddir/WorkspaceTests.exe)" "-win32manifest:$(winpath src/DesktopTidy/app.manifest)" \
-  -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Runtime.Serialization.dll \
+  "${webrefs[@]}" -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Runtime.Serialization.dll \
   "$(winpath tools/WorkspaceTests/Program.cs)" \
-  "-win32icon:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico)" "-resource:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico),DesktopTidy.AppIcon" "$(winpath src/DesktopTidy/UI/AppBrand.cs)" "$(winpath src/DesktopTidy/Program.cs)" "$(winpath src/DesktopTidy/TrayApplicationContext.cs)" "$(winpath src/DesktopTidy/Core/Classification.cs)" "$(winpath src/DesktopTidy/Core/LayoutStore.cs)" \
-  "$(winpath src/DesktopTidy/Core/WorkspaceController.cs)" "$(winpath src/DesktopTidy/UI/ClassificationBox.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceForm.cs)" "$(winpath src/DesktopTidy/Windows/DesktopIconVisibility.cs)" "$(winpath src/DesktopTidy/UI/DesktopListControl.cs)" "$(winpath src/DesktopTidy/UI/MainForm.cs)" \
+  "-win32icon:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico)" "-resource:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico),DesktopTidy.AppIcon" "$(winpath src/DesktopTidy/UI/AppBrand.cs)" "$(winpath src/DesktopTidy/Program.cs)" "$(winpath src/DesktopTidy/TrayApplicationContext.cs)" "$(winpath src/DesktopTidy/Core/ApplicationClassifier.cs)" "$(winpath src/DesktopTidy/Core/Classification.cs)" "$(winpath src/DesktopTidy/Core/LayoutStore.cs)" \
+  "$(winpath src/DesktopTidy/Core/WorkspaceController.cs)" "$(winpath src/DesktopTidy/UI/ClassificationBox.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceForm.cs)" "$(winpath src/DesktopTidy/UI/WebWorkspace.cs)" "$(winpath src/DesktopTidy/Windows/DesktopIconVisibility.cs)" "$(winpath src/DesktopTidy/UI/DesktopListControl.cs)" "$(winpath src/DesktopTidy/UI/MainForm.cs)" \
+  "$(winpath src/DesktopTidy/UI/WorkspaceChrome.cs)" "$(winpath src/DesktopTidy/UI/SurfaceDrawing.cs)" "$(winpath src/DesktopTidy/UI/Theme.cs)" "$(winpath src/DesktopTidy/Windows/DesktopAttachment.cs)" "$(winpath src/DesktopTidy/Windows/DesktopReader.cs)" \
+  "$(winpath src/DesktopTidy/Windows/NativeMethods.cs)" "$(winpath src/DesktopTidy/Windows/ShellIconCache.cs)"
+"$csc" -nologo -target:exe -platform:x64 -optimize+ -warn:4 -warnaserror+ -main:ApplicationClassificationChecks \
+  "-out:$(winpath $builddir/ApplicationClassificationChecks.exe)" "-win32manifest:$(winpath src/DesktopTidy/app.manifest)" \
+  "${webrefs[@]}" -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Runtime.Serialization.dll \
+  "$(winpath tools/ApplicationClassificationChecks.cs)" \
+  "-win32icon:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico)" "-resource:$(winpath src/DesktopTidy/Assets/desktop-tidy.ico),DesktopTidy.AppIcon" "$(winpath src/DesktopTidy/UI/AppBrand.cs)" "$(winpath src/DesktopTidy/Program.cs)" "$(winpath src/DesktopTidy/TrayApplicationContext.cs)" "$(winpath src/DesktopTidy/Core/ApplicationClassifier.cs)" "$(winpath src/DesktopTidy/Core/Classification.cs)" "$(winpath src/DesktopTidy/Core/LayoutStore.cs)" \
+  "$(winpath src/DesktopTidy/Core/WorkspaceController.cs)" "$(winpath src/DesktopTidy/UI/ClassificationBox.cs)" "$(winpath src/DesktopTidy/UI/WorkspaceForm.cs)" "$(winpath src/DesktopTidy/UI/WebWorkspace.cs)" "$(winpath src/DesktopTidy/Windows/DesktopIconVisibility.cs)" "$(winpath src/DesktopTidy/UI/DesktopListControl.cs)" "$(winpath src/DesktopTidy/UI/MainForm.cs)" \
   "$(winpath src/DesktopTidy/UI/WorkspaceChrome.cs)" "$(winpath src/DesktopTidy/UI/SurfaceDrawing.cs)" "$(winpath src/DesktopTidy/UI/Theme.cs)" "$(winpath src/DesktopTidy/Windows/DesktopAttachment.cs)" "$(winpath src/DesktopTidy/Windows/DesktopReader.cs)" \
   "$(winpath src/DesktopTidy/Windows/NativeMethods.cs)" "$(winpath src/DesktopTidy/Windows/ShellIconCache.cs)"
 cp src/DesktopTidy/App.config $builddir/WorkspaceTests.exe.config
+cp src/DesktopTidy/App.config $builddir/ApplicationClassificationChecks.exe.config
 cp src/DesktopTidy/App.config $builddir/DesktopTidy.exe.config
 cp src/DesktopTidy/App.config $builddir/MemoryProbe.exe.config
 printf '%s\n' "Release x64 构建通过：$builddir/DesktopTidy.exe"

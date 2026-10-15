@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>桌面整理 · 工作区</title>
+    <link rel="icon" href="tidy.svg" />
+    <link rel="stylesheet" href="workspace.css" />
+    <script defer src="vendor/gsap.min.js"></script>
+    <script defer src="vendor/ScrollTrigger.min.js"></script>
+    <script defer src="workspace.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" aria-label="工作区导航">
+        <button
+          class="brand"
+          id="move"
+          title="按住拖动工作区"
+          aria-label="拖动工作区"
+        >
+          Tidy<span>.</span>
+        </button>
+        <p class="brand-caption">给桌面一点秩序。</p>
+        <label class="search-box"
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m16 16 5 5" /></svg
+          ><input
+            id="search"
+            type="search"
+            maxlength="260"
+            placeholder="搜索桌面"
+            aria-label="搜索图标名称"
+          /><kbd>⌃ F</kbd></label
+        >
+        <nav class="main-nav" aria-label="视图">
+          <button class="nav-item active" id="all">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" /></svg
+            >全部图标<span id="total">0</span>
+          </button>
+        </nav>
+        <div class="nav-label">分类<span>拖动图标归类</span></div>
+        <nav id="categories" aria-label="跳转分类"></nav>
+        <button class="new-category" data-command="create">
+          <span aria-hidden="true">＋</span> 新建分类
+        </button>
+        <div class="sidebar-bottom">
+          <span class="local-dot" aria-hidden="true"></span
+          >只在本机整理，不移动文件<button
+            id="settings"
+            aria-label="工作区设置"
+            title="工作区设置"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="m9 3-.6 2.4-2.4 1L4 6l-2 4 2 1.5v1L2 14l2 4 2-.4 2.4 1L9 21h5l.6-2.4 2.4-1 2 .4 2-4-2-1.5v-1L21 10l-2-4-2 .4-2.4-1L14 3Z"
+              />
+              <circle cx="11.5" cy="12" r="3" />
+            </svg>
+          </button>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <span class="breadcrumb"
+            >工作区 <span>/</span>
+            <strong id="view-name">全部图标</strong></span
+          >
+          <div class="topbar-actions">
+            <button
+              data-command="undo"
+              title="撤销上次修改 · Ctrl+Z"
+              aria-label="撤销上次修改"
+            >
+              ↶ <span>撤销</span></button
+            ><button id="theme-toggle" title="切换明暗主题" aria-label="切换明暗主题">◐ 主题</button><button data-command="hide" title="收起到托盘">
+              收起 <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </header>
+        <div id="scroll" tabindex="-1">
+          <section class="overview">
+            <div>
+              <p class="eyebrow">少一点杂乱，多一点专注</p>
+              <h1 id="heading">我的桌面<span>.</span></h1>
+              <p id="summary">正在读取本地工作区…</p>
+            </div>
+            <button class="primary" data-command="refresh" id="refresh">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 10a8 8 0 1 0-1 8M20 3v7h-7" /></svg
+              ><span>刷新桌面</span>
+            </button>
+          </section>
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <span class="status-dot" aria-hidden="true"></span
+              ><span id="updated">本地工作区</span>
+            </div>
+            <div class="tools">
+              <button data-command="sort" id="sort">数量 ↓</button
+              ><button data-command="collapseAll" id="collapse">全部折叠</button
+              ><button data-command="sortItems" title="各分类内按名称排序">
+                名称排序
+              </button>
+            </div>
+          </div>
+          <div id="grid" class="category-grid" aria-label="分类工作区"></div>
+          <div class="empty" id="empty" hidden>
+            <span class="empty-symbol" aria-hidden="true">⌕</span>
+            <h2>没有找到匹配的图标</h2>
+            <p>换个名称试试，或清空搜索查看全部。</p>
+            <button id="clear-search">清空搜索</button>
+          </div>
+          <footer class="canvas-footer">
+            <span>文件未搬动，习惯不用变。</span
+            ><span>双击打开 <i>·</i> 拖放归类</span>
+          </footer>
+        </div>
+        <div class="feedback">
+          <span class="feedback-mark" aria-hidden="true">✓</span
+          ><span id="feedback" role="status" aria-live="polite"
+            >工作区已就绪</span
+          ><button
+            id="resize"
+            title="按住调整工作区大小"
+            aria-label="调整工作区大小"
+          >
+            ◢
+          </button>
+        </div>
+      </main>
+    </div>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <div class="dialog-header">
+        <h2 id="settings-title">工作区设置</h2>
+        <button id="close-settings" aria-label="关闭设置">×</button>
+      </div>
+      <p class="dialog-caption">你的桌面，按你的习惯。</p>
+      <label class="setting-row"
+        ><span>隐藏空分类</span><input type="checkbox" id="hide-empty" /></label
+      ><label class="setting-row"
+        ><span>启动后隐藏原生图标</span
+        ><input type="checkbox" id="startup" /></label
+      ><label class="setting-row"
+        ><span>深色主题</span><input type="checkbox" id="dark-theme" /></label
+      ><button class="system-theme-button" id="system-theme" data-command="systemTheme">跟随 Windows 应用模式</button>
+      <p class="theme-note" id="theme-note">主题默认跟随 Windows；切换后会记住你的选择。</p>
+      <label class="opacity-label" for="opacity"
+        >工作区不透明度 <output id="opacity-value">100%</output></label
+      ><input id="opacity" type="range" min="25" max="100" step="25" />
+      <div class="settings-actions">
+        <button data-command="desktop" id="desktop">切换原生桌面图标</button
+        ><button data-command="resetClassification">重新自动分类…</button
+        ><button data-command="native">切回原生界面</button>
+      </div>
+      <p class="settings-note">
+        收起或退出时恢复原生桌面状态。<br />删除分类不会删除文件，可撤销。
+      </p>
+    </dialog>
+    <dialog id="assign-dialog" aria-labelledby="assign-title">
+      <div class="dialog-header">
+        <h2 id="assign-title">移动到分类</h2>
+        <button id="close-assign" aria-label="关闭分类选择">×</button>
+      </div>
+      <p class="dialog-caption" id="assign-name"></p>
+      <div id="assign-options"></div>
+    </dialog>
+  </body>
+</html>

@@ -248,13 +248,15 @@ namespace DesktopTidy.UI
             e.Graphics.Clear(BackColor);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             Color fill = !Enabled ? theme.Header : pressed ? theme.Pressed : hovered ? theme.Hover : theme.Accent;
-            if (Secondary && Enabled) fill = pressed ? theme.Stroke : hovered ? theme.Background : theme.Header;
-            if (Secondary && Quiet && Enabled) fill = pressed ? theme.Stroke : hovered ? theme.Header : BackColor;
+            if (Secondary && Enabled) fill = pressed ? theme.Header : hovered ? theme.AccentSoft : BackColor;
+            if (Secondary && Quiet && Enabled) fill = pressed ? theme.Header : hovered ? theme.AccentSoft : BackColor;
             if (Selected && Enabled) fill = theme.Accent;
-            Color ink = !Enabled ? theme.Muted : Selected || !Secondary ? theme.AccentText : theme.Text;
+            Color ink = !Enabled ? theme.Muted : Selected || !Secondary ? theme.AccentText : hovered && !SystemInformation.HighContrast ? theme.Accent : theme.Text;
+            if (Secondary && Enabled && (hovered || pressed) && SystemInformation.HighContrast) { fill = theme.Accent; ink = theme.AccentText; }
             var bounds = new Rectangle(2, 2, Math.Max(1, Width - 5), Math.Max(1, Height - 5));
-            int radius = ToolGlyph == null ? 12 : 6;
+            int radius = 10;
             SurfaceDrawing.Fill(e.Graphics, bounds, radius, fill);
+            if (Secondary && !Quiet) SurfaceDrawing.Outline(e.Graphics, bounds, radius, hovered && Enabled ? theme.AccentLine : theme.StrongStroke);
             Rectangle textBounds = bounds;
             if (Quiet) { textBounds.X += 12; textBounds.Width -= 24; }
             if (ToolGlyph != null)

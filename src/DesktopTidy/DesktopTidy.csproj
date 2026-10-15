@@ -9,13 +9,16 @@
     <OutputPath>..\..\build\prototype\</OutputPath><Optimize>true</Optimize><WarningLevel>4</WarningLevel><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ApplicationManifest>app.manifest</ApplicationManifest><ApplicationIcon>Assets\desktop-tidy.ico</ApplicationIcon>
   </PropertyGroup>
-  <ItemGroup><Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Drawing" /><Reference Include="System.Windows.Forms" /><Reference Include="System.Runtime.Serialization" /></ItemGroup>
+  <ItemGroup><Reference Include="System.Web.Extensions" /><Reference Include="Microsoft.Web.WebView2.Core"><HintPath>..\..\build\web-deps\sdk\Microsoft.Web.WebView2.Core.dll</HintPath></Reference><Reference Include="Microsoft.Web.WebView2.WinForms"><HintPath>..\..\build\web-deps\sdk\Microsoft.Web.WebView2.WinForms.dll</HintPath></Reference><Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Drawing" /><Reference Include="System.Windows.Forms" /><Reference Include="System.Runtime.Serialization" /></ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" /><Compile Include="TrayApplicationContext.cs" />
     <Compile Include="UI\AppBrand.cs" /><Compile Include="UI\MainForm.cs" /><Compile Include="UI\DesktopListControl.cs" /><Compile Include="UI\Theme.cs" /><Compile Include="UI\WorkspaceChrome.cs" /><Compile Include="UI\SurfaceDrawing.cs" />
     <Compile Include="Windows\DesktopReader.cs" /><Compile Include="Windows\NativeMethods.cs" />
-    <Compile Include="Core\Classification.cs" /><Compile Include="Core\LayoutStore.cs" /><Compile Include="Core\WorkspaceController.cs" /><Compile Include="UI\ClassificationBox.cs" /> <Compile Include="UI\WorkspaceForm.cs" /> <Compile Include="Windows\DesktopIconVisibility.cs" /><Compile Include="Windows\DesktopAttachment.cs" /><Compile Include="Windows\ShellIconCache.cs" />
+    <Compile Include="Core\ApplicationClassifier.cs" /><Compile Include="Core\Classification.cs" /><Compile Include="Core\LayoutStore.cs" /><Compile Include="Core\WorkspaceController.cs" /><Compile Include="UI\ClassificationBox.cs" /> <Compile Include="UI\WorkspaceForm.cs" /><Compile Include="UI\WebWorkspace.cs" /> <Compile Include="Windows\DesktopIconVisibility.cs" /><Compile Include="Windows\DesktopAttachment.cs" /><Compile Include="Windows\ShellIconCache.cs" />
     <EmbeddedResource Include="Assets\desktop-tidy.ico"><LogicalName>DesktopTidy.AppIcon</LogicalName></EmbeddedResource><None Include="Assets\desktop-tidy.svg" /><None Include="Assets\desktop-tidy.png" /><None Include="App.config" /><None Include="app.manifest" />
   </ItemGroup>
+  <Target Name="PrepareOfflineWorkspace" BeforeTargets="ResolveReferences">
+    <Exec Command="python &quot;$(MSBuildProjectDirectory)\..\..\scripts\prepare-web.py&quot; --output &quot;$(MSBuildProjectDirectory)\$(OutputPath).&quot;" />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -45,7 +45,7 @@ internal static class WorkspaceTests
                 Check(Classification.Classify("Report.PDF", false) == Category.Documents, "case-insensitive document");
                 Check(Classification.Classify("photo.webp", false) == Category.Images, "image");
                 Check(Classification.Classify("movie.mkv", false) == Category.Videos, "video");
-                Check(Classification.Classify("app.msix", false) == Category.Installers, "installer");
+                Check(Classification.Classify("app.msix", false) == Category.Shortcuts, "installer goes to programs");
                 Check(Classification.Classify("backup.7z", false) == Category.Archives, "archive");
                 Check(Classification.Classify("setup.exe", false) == Category.Shortcuts, "exe not guessed installer");
                 Check(Classification.Classify("folder.pdf", true) == Category.Folders, "folder precedence");
@@ -90,11 +90,12 @@ internal static class WorkspaceTests
                 using (var heading = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold))
                 using (var controller = new WorkspaceController(font, delegate(string text) { messages.Add(text); }, config))
                 {
+                    Check(controller.CompleteFirstRunChoice(false), "first-run fixture choice persisted");
                     controller.Show(result); Pump(1200);
-                    Check(controller.Visible && Boxes(controller).Count == 8, "eight lightweight category boxes");
+                    Check(controller.Visible && Boxes(controller).Count == 16, "sixteen lightweight category boxes");
                     Check(Items(controller).Count == 34, "all eligible items exactly once");
                     int attached = Boxes(controller).FindAll(delegate(ClassificationBox box) { return box.Attached; }).Count;
-                    log.WriteLine("Attached " + attached + "/8; private MiB " + NativeMethods.PrivateMiB().ToString("F2"));
+                    log.WriteLine("Attached " + attached + "/16; private MiB " + NativeMethods.PrivateMiB().ToString("F2"));
                     foreach (var box in Boxes(controller)) Screenshot(box, Path.Combine(directory, "box-" + box.State.Category + ".png"));
                     Check(File.Exists(Path.Combine(config, "desktop-snapshot.json")), "native coordinate snapshot before show");
                     WorkspaceItem item = Items(controller).Find(delegate(WorkspaceItem value) { return value.Name == "项目说明.txt"; });
@@ -108,12 +109,12 @@ internal static class WorkspaceTests
                     var reject = new DragEventArgs(external, 1, 0, 0, DragDropEffects.Move, DragDropEffects.Move);
                     Event(target, "OnDragEnter", reject); Check(reject.Effect == DragDropEffects.None, "reject external file move");
                     controller.Undo(); Check(item.Category == Category.Documents, "undo manual classification");
-                    var boxToMove = Boxes(controller)[0]; int oldX = boxToMove.State.X;
-                    Event(boxToMove, "OnMouseDown", new MouseEventArgs(MouseButtons.Left, 1, 24, 12, 0));
-                    Event(boxToMove, "OnMouseMove", new MouseEventArgs(MouseButtons.Left, 0, 40, 22, 0));
-                    Event(boxToMove, "OnMouseUp", new MouseEventArgs(MouseButtons.Left, 1, 24, 12, 0));
-                    Check(boxToMove.State.X == oldX + 16, "title drag persists coordinates");
-                    controller.Undo(); Check(Boxes(controller)[0].State.X == oldX, "undo movement");
+                    var boxToMove = Boxes(controller)[0]; Category firstCategory = boxToMove.State.Category;
+                    var reorderTarget = Boxes(controller)[1].LayoutBounds;
+                    controller.PreviewGroupMove(boxToMove, new Point(reorderTarget.Left + reorderTarget.Width / 2, reorderTarget.Top + reorderTarget.Height / 2));
+                    controller.CompleteGroupMove();
+                    Check(Boxes(controller)[1].State.Category == firstCategory, "title drag persists custom order");
+                    controller.Undo(); Check(Boxes(controller)[0].State.Category == firstCategory, "undo group reorder");
                     var boxToResize = Boxes(controller)[0]; int oldWidth = boxToResize.Width;
                     Event(boxToResize, "OnMouseDown", new MouseEventArgs(MouseButtons.Left, 1, boxToResize.Width - 9, boxToResize.Height - 9, 0));
                     Event(boxToResize, "OnMouseMove", new MouseEventArgs(MouseButtons.Left, 0, boxToResize.Width + 17, boxToResize.Height + 11, 0));
@@ -133,13 +134,14 @@ internal static class WorkspaceTests
                     controller.CommitOpacity(73); Check(controller.OpacityPercent == 75, "opacity saved");
                     controller.Undo(); Check(controller.OpacityPercent == 100, "opacity undo");
                     controller.CommitOpacity(999); Check(controller.OpacityPercent == 100, "opacity upper clamp");
-                    controller.CommitOpacity(-1); Check(controller.OpacityPercent == 0, "opacity lower clamp");
+                    controller.CommitOpacity(-1); Check(controller.OpacityPercent == 25, "opacity lower clamp");
                     controller.CommitOpacity(100);
                     controller.Undo(); controller.CommitOpacity(100);
                     workspace = Boxes(controller)[0].TopLevelControl as WorkspaceForm;
                     Screenshot(workspace, Path.Combine(directory, "workspace-container.png"));
+                    int retainedCardWidth = Boxes(controller)[0].Width;
                     workspace.Size = workspace.MinimumSize; controller.ArrangeGroups();
-                    Check(Boxes(controller)[0].Width == 280, "minimum workspace keeps usable card size with scroll");
+                    Check(Boxes(controller)[0].Width == retainedCardWidth && retainedCardWidth >= 220, "minimum workspace preserves usable card width with scroll");
                     Screenshot(workspace, Path.Combine(directory, "workspace-minimum.png"));
                     Check(DesktopIconVisibility.RunGuardian(new string[] { "--restore-desktop-icons" }) == 2, "guardian rejects invalid arguments without desktop changes");
                     controller.ResetLayout();
@@ -165,7 +167,7 @@ internal static class WorkspaceTests
                         {
                             var child = accessibility.GetChild(i);
                             if (child == null || child.Role != AccessibleRole.StaticText) continue;
-                            if (child.Name == "桌面分类框") headingAccessible = child.Bounds.Width > 0 && ReferenceEquals(child.Parent, accessibility);
+                            if (child.Name == "桌面概览") headingAccessible = child.Bounds.Width > 0 && ReferenceEquals(child.Parent, accessibility);
                             if (child.Name == "桌面文件  /  500 项") countAccessible = true;
                         }
                         Check(headingAccessible && countAccessible, "shared painted text exposes accessible heading and current count");
@@ -205,8 +207,9 @@ internal static class WorkspaceTests
                 using (var emptyFont = new Font("Microsoft YaHei UI", 11F))
                 using (var empty = new WorkspaceController(emptyFont, delegate(string text) { }, Path.Combine(directory, "empty-config")))
                 {
+                    Check(empty.CompleteFirstRunChoice(false), "empty first-run fixture choice persisted");
                     empty.Show(new DesktopReadResult { Success = true, Icons = new List<DesktopIcon>() });
-                    Check(empty.Visible && Boxes(empty).Count == 8 && Items(empty).Count == 0, "empty desktop retains workspace and sidebar");
+                    Check(empty.Visible && Boxes(empty).Count == 16 && Items(empty).Count == 0, "empty desktop retains workspace and sidebar");
                     empty.Hide(); Check(!empty.Visible, "empty workspace can be hidden");
                 }
                 var readerAfter = DesktopReader.Read(); Check(readerAfter.Success, "read-only real desktop scan after");

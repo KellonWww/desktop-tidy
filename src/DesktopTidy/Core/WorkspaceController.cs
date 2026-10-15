@@ -49,19 +49,24 @@ namespace DesktopTidy.Core
         }
         private void EnsureGroups()
         {
+            layout.Groups.RemoveAll(delegate(GroupState group) { return group.Category == Category.Installers; });
+            foreach (var assignment in layout.Assignments)
+                if (assignment.Category == Category.Installers) assignment.Category = Category.Shortcuts;
+            foreach (var group in layout.Groups)
+                if (group.Category == Category.Shortcuts && group.Title == "程序与快捷方式 · 待分类") group.Title = null;
             int columns = 3, width = 280, height = 260;
             foreach (Category category in Enum.GetValues(typeof(Category)))
             {
-                if (category > Category.Other) continue;
+                if (Classification.IsCustom(category) || category == Category.Installers || layout.DeletedCategories.Contains(category)) continue;
                 bool found = layout.Groups.Exists(delegate(GroupState group) { return group.Category == category; });
-                int index = (int)category;
+                int index = layout.Groups.Count;
                 if (!found) layout.Groups.Add(new GroupState { Category = category, X = 12 + index % columns * (width + 12), Y = 12 + index / columns * (height + 12), Width = width, Height = height });
             }
         }
         internal void Show(DesktopReadResult result)
         {
             if (disposed) return;
-            if (result == null || !result.Success) { Notify("请先完成桌面扫描，再显示工作区。"); return; }
+            if (result == null || !result.Success) { Notify("请先完成桌面扫描，再显示分类窗口。"); return; }
             if (!EnsureFirstRunGuide()) return;
             int skipped;
             if (!UpdateSnapshot(result, out skipped)) return;
@@ -134,16 +139,49 @@ namespace DesktopTidy.Core
             }
             items = next; return true;
         }
+        internal List<GroupState> WebGroups { get { return layout.Groups; } }
+        internal List<WorkspaceItem> WebItems { get { return items; } }
+        internal void DrawWebIcon(Graphics graphics, WorkspaceItem item, Rectangle bounds) { icons.Draw(graphics, item, bounds); }
+        internal void ToggleWebCategory(Category category)
+        {
+            var box = boxes.Find(delegate(ClassificationBox value) { return value.State.Category == category; });
+            if (box != null) Toggle(box);
+        }
+        internal void ReorderWebCategory(Category category, string before)
+        {
+            int targetId;
+            if (!int.TryParse(before, out targetId) || category == (Category)targetId) return;
+            var source = boxes.Find(delegate(ClassificationBox value) { return value.State.Category == category; });
+            var target = boxes.Find(delegate(ClassificationBox value) { return value.State.Category == (Category)targetId; });
+            if (source == null || target == null || !Checkpoint()) return;
+            var original = new List<ClassificationBox>(boxes); CategoryOrderMode previous = layout.OrderMode;
+            boxes.Remove(source); boxes.Insert(boxes.IndexOf(target), source);
+            layout.Groups.Clear(); foreach (var box in boxes) layout.Groups.Add(box.State);
+            layout.OrderMode = CategoryOrderMode.Custom;
+            if (!Save())
+            {
+                boxes.Clear(); boxes.AddRange(original); layout.Groups.Clear();
+                foreach (var box in boxes) layout.Groups.Add(box.State); layout.OrderMode = previous;
+            }
+            nextSortDescending = true; ReflowGroups(false, true); if (container != null) container.SyncCommands();
+        }
         internal Action IconReady;
-        internal void InvalidateIcons() { if (searchBox != null && !searchBox.IsDisposed) searchBox.Invalidate(); foreach (var box in boxes) if (!box.IsDisposed) box.Invalidate(); }
+        internal void InvalidateIcons() { if (container != null) container.RefreshWebIcons(); if (searchBox != null && !searchBox.IsDisposed) searchBox.Invalidate(); foreach (var box in boxes) if (!box.IsDisposed) box.Invalidate(); }
         internal void RefreshTheme() { if (searchBox != null && !searchBox.IsDisposed) searchBox.RefreshTheme(); if (container != null) container.RefreshTheme(); foreach (var box in boxes) if (!box.IsDisposed) box.RefreshTheme(); }
+        internal void SetThemeOverride(bool? dark)
+        {
+            if (SystemInformation.HighContrast) { Notify("系统高对比度已启用，当前由 Windows 接管颜色设置。"); return; }
+            if (!Theme.SetOverride(dark)) { Notify("主题设置保存失败，请检查当前 Windows 用户的注册表权限。"); return; }
+            RefreshTheme();
+            Notify(dark.HasValue ? dark.Value ? "已切换深色主题。" : "已切换浅色主题。" : "主题已改为跟随 Windows 应用模式。");
+        }
         private void RefreshItems()
         {
             foreach (var item in items)
             {
-                item.Category = Classification.Classify(item.Path, item.IsDirectory);
+                item.Category = Classification.ResolveCategory(item.AutomaticCategory, layout);
                 foreach (var assignment in layout.Assignments)
-                    if (string.Equals(assignment.Identity, item.Identity, StringComparison.OrdinalIgnoreCase)) { item.Category = assignment.Category; break; }
+                    if (string.Equals(assignment.Identity, item.Identity, StringComparison.OrdinalIgnoreCase)) { item.Category = Classification.ResolveCategory(assignment.Category, layout); break; }
             }
             RefreshSearchResults();
         }
@@ -269,7 +307,7 @@ namespace DesktopTidy.Core
             if (!Checkpoint()) return;
             var previous = layout.Assignments; layout.Assignments = new List<Assignment>();
             if (!Save()) { layout.Assignments = previous; return; }
-            RefreshItems(); Notify("已清除手动归属并恢复按类型分类；可撤销。");
+            RefreshItems(); Notify("已清除手动归属并恢复自动分类；可撤销。");
         }
         internal void ResetLayout()
         {
@@ -549,20 +587,24 @@ namespace DesktopTidy.Core
         internal void DeleteCategory(ClassificationBox box) { DeleteCategory(box.State.Category); }
         internal void DeleteCategory(Category category)
         {
-            if (category <= Category.Other) return;
-            if (WorkspaceDialog.Confirm("删除分类", "分类内的图标将恢复按文件类型归类。\n原文件不会删除或移动，此操作可撤销。", "删除分类", font)) TryDeleteCategory(category);
+            if (!layout.Groups.Exists(delegate(GroupState group) { return group.Category == category; })) return;
+            if (WorkspaceDialog.Confirm("删除分类", "分类内的图标将自动归入剩余分类。\n默认分类删除后，刷新或重启不会重新创建。\n原文件不会删除或移动，此操作可撤销。", "删除分类", font)) TryDeleteCategory(category);
         }
         internal bool TryDeleteCategory(Category category)
         {
             var state = layout.Groups.Find(delegate(GroupState group) { return group.Category == category; });
-            if (category <= Category.Other || state == null || !Checkpoint()) return false;
+            if (state == null) return false;
+            if (layout.Groups.Count <= 1) { Notify("至少保留一个分类，避免图标无处显示。"); return false; }
+            if (!Checkpoint()) return false;
             int index = layout.Groups.IndexOf(state); var previous = new List<Assignment>(layout.Assignments);
+            var previousDeleted = new List<Category>(layout.DeletedCategories);
+            if (!Classification.IsCustom(category) && !layout.DeletedCategories.Contains(category)) layout.DeletedCategories.Add(category);
             layout.Groups.Remove(state); layout.Assignments.RemoveAll(delegate(Assignment item) { return item.Category == category; });
-            if (!Save()) { layout.Groups.Insert(index, state); layout.Assignments = previous; return false; }
+            if (!Save()) { layout.Groups.Insert(index, state); layout.Assignments = previous; layout.DeletedCategories = previousDeleted; return false; }
             var box = boxes.Find(delegate(ClassificationBox value) { return value.State.Category == category; });
             if (box != null) { boxes.Remove(box); box.Dispose(); }
             RefreshItems(); ReflowGroups(false, true); if (container != null) container.SyncCommands();
-            Notify("自定义分类已删除，图标恢复按类型归类；原文件未删除，可撤销。"); return true;
+            Notify("分类已删除，图标已归入剩余分类；原文件未删除，可撤销。"); return true;
         }
         internal List<Category> Categories { get { return layout.Groups.ConvertAll(delegate(GroupState group) { return group.Category; }); } }
         internal void CommitOpacity(int value)
@@ -606,7 +648,7 @@ namespace DesktopTidy.Core
         internal void RequestHide()
         {
             if (!Visible) return;
-            const string message = "从系统托盘右键 → 显示工作区，可重新打开。" + "\n托盘图标被折叠时，点击任务栏 ↑ 查找桌面整理。" + "\n桌面图标恢复原状态；原文件不会移动。";
+            const string message = "从系统托盘右键 → 显示分类窗口，可重新打开。" + "\n托盘图标被折叠时，点击任务栏 ↑ 查找桌面整理。" + "\n桌面图标恢复原状态；原文件不会移动。";
             if (WorkspaceDialog.Confirm("收起工作区", message, "收起", font)) Hide();
         }
         internal void Hide()
@@ -624,12 +666,16 @@ namespace DesktopTidy.Core
             if (Visible) return;
             notify(text);
         }
-        public void Dispose()
+        public void Dispose() { Dispose(true); }
+        internal void DisposeForExit() { Dispose(false); }
+        private void Dispose(bool persistBounds)
         {
             if (disposed) return; disposed = true;
             try
             {
-                if (container != null && showing) container.PersistBounds();
+                // Exit must not synchronously flush layout.json on the UI thread. Bounds
+                // are already persisted after each completed move/resize gesture.
+                if (persistBounds && container != null && showing) container.PersistBounds();
                 if (categoryEditor != null) categoryEditor.Close();
             }
             finally

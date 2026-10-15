@@ -18,9 +18,14 @@ namespace DesktopTidy.UI
     {
         private readonly WorkspaceController owner;
         private readonly ShellIconCache icons;
+        private readonly Font categoryFont;
         private readonly SurfaceScrollBar scroll;
         private readonly ContextMenuStrip menu;
         private readonly List<WorkspaceItem> items = new List<WorkspaceItem>();
+        private readonly List<Point> itemPositions = new List<Point>();
+        private readonly Dictionary<int, string> sectionHeaders = new Dictionary<int, string>();
+        private int contentHeight;
+        private bool GroupSections { get { return !IsSearchResults && State.Category == Category.Entertainment; } }
         private Theme theme = Theme.Read();
         private int selected = -1, hover = -1;
         private Point mouseStart, locationStart;
@@ -40,6 +45,7 @@ namespace DesktopTidy.UI
         internal ClassificationBox(WorkspaceController owner, GroupState state, ShellIconCache icons, Font font)
         {
             this.owner = owner; State = state; this.icons = icons;
+            categoryFont = new Font(font.FontFamily, font.Size, FontStyle.Bold);
             Font = font; Text = "桌面分类 · " + owner.CategoryTitle(state.Category);
             TopLevel = false; FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = false;
             StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None;
@@ -52,8 +58,8 @@ namespace DesktopTidy.UI
             var toggle = menu.Items.Add("折叠分类框", null, delegate { owner.Toggle(this); });
             menu.Opening += delegate { toggle.Text = State.Collapsed ? "展开分类框" : "折叠分类框"; };
             menu.Items.Add("重命名分类", null, delegate { owner.RenameCategory(this); });
-            if (state.Category > Category.Other) menu.Items.Add("删除此自定义分类（不删文件）", null, delegate { owner.DeleteCategory(this); });
-            menu.Items.Add("重新按类型分类（清除手动归属）", null, delegate { owner.ResetClassification(); });
+            menu.Items.Add("删除分类（不删文件）", null, delegate { owner.DeleteCategory(this); });
+            menu.Items.Add("重新自动分类（清除手动归属）", null, delegate { owner.ResetClassification(); });
             menu.Items.Add("撤销上一次修改", null, delegate { owner.Undo(); });
             var collapseAll = menu.Items.Add("折叠全部分类框", null, delegate { owner.ToggleGroupsCollapsed(); });
             menu.Opening += delegate { collapseAll.Text = owner.AllGroupsCollapsed ? "展开全部分类框" : "折叠全部分类框"; };
@@ -102,14 +108,42 @@ namespace DesktopTidy.UI
         internal void SetItems(IEnumerable<WorkspaceItem> values)
         {
             items.Clear(); items.AddRange(values);
-            if (State.SortByName) items.Sort(delegate(WorkspaceItem a, WorkspaceItem b) { return StringComparer.CurrentCultureIgnoreCase.Compare(a.Name, b.Name); }); selected = hover = -1; scroll.Value = 0; ApplyState();
+            if (GroupSections || State.SortByName) items.Sort(delegate(WorkspaceItem a, WorkspaceItem b)
+            {
+                int section = GroupSections ? SectionOrder(a).CompareTo(SectionOrder(b)) : 0;
+                return section != 0 ? section : StringComparer.CurrentCultureIgnoreCase.Compare(a.Name, b.Name);
+            }); selected = hover = -1; scroll.Value = 0; ApplyState();
         }
         internal void RefreshTheme() { theme = Theme.Read(); BackColor = theme.Surface; ForeColor = theme.Text; scroll.SetTheme(theme); Invalidate(); }
+        private static string SectionTitle(WorkspaceItem item) { return string.IsNullOrEmpty(item.Section) ? "其他" : item.Section; }
+        private static int SectionOrder(WorkspaceItem item)
+        {
+            int index = Array.IndexOf(new[] { "音乐", "影视", "游戏", "社交" }, SectionTitle(item));
+            return index < 0 ? 4 : index;
+        }
+        private void BuildContent()
+        {
+            itemPositions.Clear(); sectionHeaders.Clear();
+            int top = 0, column = 0; string section = null;
+            foreach (var item in items)
+            {
+                string next = SectionTitle(item);
+                if (GroupSections && next != section)
+                {
+                    if (column > 0) { top += CellHeight; column = 0; }
+                    sectionHeaders.Add(top, next); top += Font.Height + 10; section = next;
+                }
+                itemPositions.Add(new Point(column * CellWidth, top));
+                if (++column == Columns) { top += CellHeight; column = 0; }
+            }
+            contentHeight = top + (column > 0 ? CellHeight : 0);
+        }
         private void LayoutScroll()
         {
             if (scroll == null) return;
             int visibleRows = Math.Max(1, (ClientSize.Height - HeaderHeight - 12) / CellHeight);
-            int rows = (items.Count + Columns - 1) / Columns;
+            BuildContent();
+            int rows = (contentHeight + CellHeight - 1) / CellHeight;
             scroll.SetBounds(Width - 24, HeaderHeight + 6, 14, Math.Max(1, Height - HeaderHeight - 30));
             scroll.Maximum = Math.Max(0, rows - 1); scroll.LargeChange = visibleRows;
             scroll.Visible = !DisplayCollapsed && rows > visibleRows;
@@ -119,30 +153,32 @@ namespace DesktopTidy.UI
             base.OnResize(e);
             if (Width > 0 && Height > 0)
             {
-                SurfaceDrawing.Clip(this, 12);
+                SurfaceDrawing.Clip(this, 18);
             }
             LayoutScroll();
         }
         private Rectangle Cell(int index)
         {
-            return new Rectangle(12 + index % Columns * CellWidth, HeaderHeight + 6 + (index / Columns - scroll.Value) * CellHeight, CellWidth - 4, CellHeight - 4);
+            Point position = itemPositions[index];
+            return new Rectangle(12 + position.X, HeaderHeight + 6 + position.Y - scroll.Value * CellHeight, CellWidth - 4, CellHeight - 4);
         }
         private int Hit(Point point)
         {
             if (DisplayCollapsed || point.Y < HeaderHeight + 6 || point.Y >= Height - 12 || point.X < 12 || point.X >= Width - 18) return -1;
-            int column = (point.X - 12) / CellWidth;
-            int index = (scroll.Value + (point.Y - HeaderHeight - 6) / CellHeight) * Columns + column;
-            return column < Columns && index < items.Count ? index : -1;
+            for (int index = 0; index < itemPositions.Count; index++)
+                if (Cell(index).Contains(point)) return index;
+            return -1;
         }
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            SurfaceDrawing.Outline(e.Graphics, new Rectangle(0, 0, Width - 1, Height - 1), 12, theme.Stroke);
-            TextRenderer.DrawText(e.Graphics, IsSearchResults ? "搜索结果" : owner.CategoryTitle(State.Category), Font, new Rectangle(18, 7, Width - 160, HeaderHeight - 12), theme.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-            TextRenderer.DrawText(e.Graphics, items.Count.ToString(), Font, new Rectangle(Width - 86, 7, 40, HeaderHeight - 12), theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+            SurfaceDrawing.Outline(e.Graphics, new Rectangle(0, 0, Width - 1, Height - 1), 18, moving && modifying ? theme.AccentLine : theme.Stroke);
+            SurfaceDrawing.Fill(e.Graphics, new Rectangle(Width - 85, (HeaderHeight - 24) / 2, 36, 24), 10, theme.Header);
+            TextRenderer.DrawText(e.Graphics, IsSearchResults ? "搜索结果" : owner.CategoryTitle(State.Category), categoryFont, new Rectangle(18, 7, Width - 160, HeaderHeight - 12), theme.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(e.Graphics, items.Count.ToString(), Font, new Rectangle(Width - 85, 7, 36, HeaderHeight - 12), theme.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
             TextRenderer.DrawText(e.Graphics, IsSearchResults ? "×" : DisplayCollapsed ? "+" : "−", Font, new Rectangle(Width - 40, 7, 28, HeaderHeight - 12), theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
             if (!IsSearchResults) TextRenderer.DrawText(e.Graphics, "排版", Font, new Rectangle(Width - 142, 7, 50, HeaderHeight - 12), theme.Accent, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
-            if (moving && modifying) SurfaceDrawing.Outline(e.Graphics, new Rectangle(2, 2, Width - 5, Height - 5), 12, theme.Accent);
+            if (moving && modifying) SurfaceDrawing.Outline(e.Graphics, new Rectangle(2, 2, Width - 5, Height - 5), 16, theme.Accent);
             if (DisplayCollapsed) return;
             if (IsSearchResults && items.Count == 0)
             {
@@ -153,11 +189,21 @@ namespace DesktopTidy.UI
             }
             using (var pen = new Pen(theme.Stroke)) e.Graphics.DrawLine(pen, 16, HeaderHeight, Width - 16, HeaderHeight);
             var clip = e.Graphics.Save(); e.Graphics.SetClip(new Rectangle(10, HeaderHeight + 2, Width - 29, Math.Max(1, Height - HeaderHeight - 14)));
-            int start = scroll.Value * Columns, end = Math.Min(items.Count, start + ((Height - HeaderHeight) / CellHeight + 1) * Columns);
-            for (int i = start; i < end; i++)
+            foreach (var header in sectionHeaders)
+            {
+                int y = HeaderHeight + 6 + header.Key - scroll.Value * CellHeight;
+                if (y + Font.Height + 10 >= HeaderHeight && y < Height - 12)
+                    TextRenderer.DrawText(e.Graphics, header.Value, Font, new Rectangle(16, y, Width - 46, Font.Height + 10), theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            }
+            for (int i = 0; i < items.Count; i++)
             {
                 Rectangle cell = Cell(i);
-                if (i == selected || i == hover) SurfaceDrawing.Fill(e.Graphics, cell, 10, theme.Header);
+                if (cell.Bottom <= HeaderHeight + 2 || cell.Top >= Height - 12) continue;
+                if (i == selected || i == hover)
+                {
+                    SurfaceDrawing.Fill(e.Graphics, cell, 10, i == selected && !SystemInformation.HighContrast ? theme.AccentSoft : theme.Header);
+                    if (i == selected) SurfaceDrawing.Outline(e.Graphics, cell, 10, theme.AccentLine);
+                }
                 icons.Draw(e.Graphics, items[i], new Rectangle(cell.X + (cell.Width - 32) / 2, cell.Y + 7, 32, 32));
                 TextRenderer.DrawText(e.Graphics, items[i].Name, Font, new Rectangle(cell.X + 2, cell.Y + 43, cell.Width - 4, cell.Height - 45), theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             }
@@ -272,6 +318,6 @@ namespace DesktopTidy.UI
             var transfer = e.Data.GetData("DesktopTidy.Item", false) as ItemTransfer;
             if (transfer != null && ReferenceEquals(transfer.Owner, owner)) owner.Assign(transfer.Item, State.Category);
         }
-        protected override void Dispose(bool disposing) { if (disposing) { motion.Stop(); motion.Dispose(); motionClock.Stop(); if (menu != null) menu.Dispose(); } base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { motion.Stop(); motion.Dispose(); motionClock.Stop(); categoryFont.Dispose(); if (menu != null) menu.Dispose(); } base.Dispose(disposing); }
     }
 }

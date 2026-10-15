@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using DesktopTidy.Windows;
 
 namespace DesktopTidy.UI
 {
@@ -9,17 +10,34 @@ namespace DesktopTidy.UI
         internal WorkspaceMenu()
         {
             ShowImageMargin = false; ShowCheckMargin = true;
-            Padding = new Padding(6); AutoClose = true;
+            Padding = new Padding(4); AutoClose = true;
             Opening += delegate { ApplyTheme(this, Theme.Read()); };
+            Opened += delegate { ApplyRoundedCorners(this, EventArgs.Empty); };
+        }
+        private static void ApplyRoundedCorners(object sender, EventArgs e)
+        {
+            var strip = sender as ToolStrip;
+            if (strip == null || strip.Width < 1 || strip.Height < 1) return;
+            try
+            {
+                int preference = 2;
+                if (NativeMethods.DwmSetWindowAttribute(strip.Handle, 33, ref preference, sizeof(int)) == 0) return;
+            }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            SurfaceDrawing.Clip(strip, 12);
         }
         private static void ApplyTheme(ToolStrip strip, Theme theme)
         {
             strip.Renderer = new WorkspaceMenuRenderer(theme);
             strip.BackColor = theme.Surface; strip.ForeColor = theme.Text;
+            var dropDown = strip as ToolStripDropDown;
+            if (dropDown != null) { dropDown.Opened -= ApplyRoundedCorners; dropDown.Opened += ApplyRoundedCorners; }
             foreach (ToolStripItem item in strip.Items)
             {
                 item.ForeColor = item.Enabled ? theme.Text : theme.Muted;
-                item.Padding = new Padding(6, 5, 6, 5);
+                item.Padding = item is ToolStripSeparator ? Padding.Empty : new Padding(5, 2, 5, 2);
+                item.Margin = item is ToolStripSeparator ? new Padding(6, 1, 6, 1) : new Padding(2, 0, 2, 0);
                 var menu = item as ToolStripMenuItem;
                 if (menu != null && menu.HasDropDownItems) ApplyTheme(menu.DropDown, theme);
             }
@@ -32,17 +50,17 @@ namespace DesktopTidy.UI
         protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
         { e.Graphics.Clear(theme.Surface); }
         protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-        { using (var pen = new Pen(theme.Stroke)) e.Graphics.DrawRectangle(pen, 0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1); }
+        { SurfaceDrawing.Outline(e.Graphics, new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 12, theme.Stroke); }
         protected override void OnRenderImageMargin(ToolStripRenderEventArgs e) { }
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
         {
             if (e.Item.Selected && e.Item.Enabled)
-                SurfaceDrawing.Fill(e.Graphics, new Rectangle(2, 1, e.Item.Width - 4, e.Item.Height - 2), 5,
-                    SystemInformation.HighContrast ? SystemColors.Highlight : theme.Header);
+                SurfaceDrawing.Fill(e.Graphics, new Rectangle(5, 1, e.Item.Width - 10, e.Item.Height - 2), 8,
+                    SystemInformation.HighContrast ? SystemColors.Highlight : theme.AccentSoft);
         }
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
-            e.TextColor = e.Item.Selected && e.Item.Enabled && SystemInformation.HighContrast ? SystemColors.HighlightText : e.Item.Enabled ? theme.Text : theme.Muted;
+            e.TextColor = e.Item.Selected && e.Item.Enabled && SystemInformation.HighContrast ? SystemColors.HighlightText : e.Item.Enabled ? e.Item.Selected ? theme.Accent : theme.Text : theme.Muted;
             TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, e.TextRectangle, e.TextColor, e.TextFormat);
         }
         protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
