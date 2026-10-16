@@ -77,7 +77,7 @@ internal static class WorkspaceTests
                 legacy.Groups = null;
                 using (var stream = File.Create(Path.Combine(config, "layout.json"))) new DataContractJsonSerializer(typeof(LayoutState)).WriteObject(stream, legacy);
                 Check(store.Load().Groups.Count == 0 && store.Error != null, "malformed legacy groups rejected safely");
-                Check(!store.Save(new LayoutState { OpacityPercent = 64 }), "invalid opacity rejected");
+                Check(!store.Save(new LayoutState { OpacityPercent = 24 }), "invalid opacity rejected");
                 Check(!store.Save(new LayoutState { Groups = new List<GroupState> { new GroupState { X = int.MaxValue } } }), "invalid local coordinates rejected");
 
                 File.WriteAllText(Path.Combine(config, "layout.json"), "corrupt"); Check(store.Load().Groups.Count == 0 && store.Error != null, "corrupt config fallback");
@@ -115,11 +115,18 @@ internal static class WorkspaceTests
                     controller.CompleteGroupMove();
                     Check(Boxes(controller)[1].State.Category == firstCategory, "title drag persists custom order");
                     controller.Undo(); Check(Boxes(controller)[0].State.Category == firstCategory, "undo group reorder");
-                    var boxToResize = Boxes(controller)[0]; int oldWidth = boxToResize.Width;
+                    var boxToResize = Boxes(controller)[0]; Category resizedCategory = boxToResize.State.Category; int oldWidth = boxToResize.Width;
                     Event(boxToResize, "OnMouseDown", new MouseEventArgs(MouseButtons.Left, 1, boxToResize.Width - 9, boxToResize.Height - 9, 0));
                     Event(boxToResize, "OnMouseMove", new MouseEventArgs(MouseButtons.Left, 0, boxToResize.Width + 17, boxToResize.Height + 11, 0));
                     Event(boxToResize, "OnMouseUp", new MouseEventArgs(MouseButtons.Left, 1, 0, 0, 0));
                     Check(boxToResize.State.Width == oldWidth + 26, "resize persists dimensions");
+                    var webSized = Boxes(controller)[1]; Category webSizedCategory = webSized.State.Category;
+                    int webWidth = webSized.State.Width, webHeight = webSized.State.Height;
+                    controller.ResizeWebCategory(webSizedCategory, 347, 381);
+                    Check(webSized.State.Width == 347 && webSized.State.Height == 381, "web resize persists snapped category dimensions");
+                    controller.Undo(); webSized = Boxes(controller).Find(delegate(ClassificationBox box) { return box.State.Category == webSizedCategory; });
+                    boxToResize = Boxes(controller).Find(delegate(ClassificationBox box) { return box.State.Category == resizedCategory; });
+                    Check(webSized.State.Width == webWidth && webSized.State.Height == webHeight, "undo web category resize");
                     controller.Toggle(boxToResize); Check(boxToResize.State.Collapsed && boxToResize.Height < 100, "collapse");
                     controller.Toggle(boxToResize); Check(!boxToResize.State.Collapsed && boxToResize.Width == oldWidth + 26, "expand preserves geometry");
                     controller.ArrangeGroups();
@@ -131,7 +138,7 @@ internal static class WorkspaceTests
                     controller.ArrangeItems(null); Check(Boxes(controller).TrueForAll(delegate(ClassificationBox b) { return b.State.SortByName; }), "global arrange items");
                     controller.SetStartupHiding(true); Check(controller.HideIconsOnStartup && store.Load().HideIconsOnStartup, "startup option persisted without hiding during setting");
                     controller.SetStartupHiding(false); Check(!controller.HideIconsOnStartup, "startup hiding can be disabled");
-                    controller.CommitOpacity(73); Check(controller.OpacityPercent == 75, "opacity saved");
+                    controller.CommitOpacity(73); Check(controller.OpacityPercent == 73, "opacity saved at one-percent precision");
                     controller.Undo(); Check(controller.OpacityPercent == 100, "opacity undo");
                     controller.CommitOpacity(999); Check(controller.OpacityPercent == 100, "opacity upper clamp");
                     controller.CommitOpacity(-1); Check(controller.OpacityPercent == 25, "opacity lower clamp");
@@ -197,6 +204,13 @@ internal static class WorkspaceTests
                     Check(GetGuiResources(Process.GetCurrentProcess().Handle, 0) <= gdi + 1, "50 show/hide cycles GDI stable");
                     Check(GetGuiResources(Process.GetCurrentProcess().Handle, 1) <= user + 1, "50 show/hide cycles USER stable");
                     var cache = (ShellIconCache)typeof(WorkspaceController).GetField("icons", Private).GetValue(controller); Check(cache.Count <= 64, "bounded icon cache");
+                    using (var iconReady = new ManualResetEvent(false))
+                    {
+                        cache.Refresh(Items(controller)[0], delegate { iconReady.Set(); });
+                        Check(iconReady.WaitOne(3000), "changed desktop icon cache refresh completes");
+                    }
+                    var revisions = (Dictionary<string, int>)typeof(ShellIconCache).GetField("revisions", Private).GetValue(cache);
+                    Check(revisions.Count == 1, "changed desktop icon invalidates its cached shell image");
                     var varied = new List<WorkspaceItem>();
                     for (int i = 0; i < 100; i++) varied.Add(new WorkspaceItem { Path = Path.Combine(fixtures, "item.ext" + i), Identity = i.ToString(), Name = "synthetic" });
                     cache.Load(varied, delegate { }); Pump(800);

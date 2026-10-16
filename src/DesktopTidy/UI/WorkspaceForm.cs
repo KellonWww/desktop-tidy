@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Diagnostics;
 using System.Windows.Forms;
 using DesktopTidy.Core;
 using DesktopTidy.Windows;
@@ -329,10 +330,15 @@ namespace DesktopTidy.UI
         }
         internal void WebFailed(string message)
         {
-            if (IsDisposed) return;
-            nativeContent.Visible = true; sidebarViewport.Visible = true; feedback.Visible = true;
-            if (web != null) web.Visible = false;
-            search.Text = owner.SearchText; SetFeedback(message); RestoreCards();
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try
+            {
+                nativeContent.Visible = true; sidebarViewport.Visible = true; feedback.Visible = true;
+                if (web != null && !web.IsDisposed) web.Visible = false;
+                search.Text = owner.SearchText; SetFeedback(message); RestoreCards();
+            }
+            catch (System.ComponentModel.Win32Exception error) { Debug.WriteLine(error); }
+            catch (ObjectDisposedException error) { Debug.WriteLine(error); }
         }
         internal void RefreshWebIcons() { if (web != null) web.RefreshIcons(); }
         internal void BeginWebGesture(bool resize)
@@ -404,14 +410,9 @@ namespace DesktopTidy.UI
         private ContextMenuStrip CreateSettingsMenu()
         {
             var menu = new WorkspaceMenu { Font = Font, AccessibleName = "工作区操作菜单" };
-            var transparency = new ToolStripMenuItem("不透明度");
-            for (int i = 1; i <= 4; i++)
-            {
-                int value = i * 25;
-                var choice = new ToolStripMenuItem(value + "%") { Checked = value == owner.OpacityPercent };
-                choice.Click += delegate { owner.CommitOpacity(value); }; transparency.DropDownItems.Add(choice);
-            }
-            menu.Items.Add(transparency);
+            menu.Items.Add(WorkspaceMenu.CreateOpacityMenu(
+                delegate { return owner.OpacityPercent; },
+                delegate(int value) { owner.CommitOpacity(value); }));
             var theme = Theme.Read();
             var darkTheme = new ToolStripMenuItem("深色主题") { Checked = theme.Dark, Enabled = !theme.HighContrast };
             darkTheme.Click += delegate { owner.SetThemeOverride(!Theme.Read().Dark); }; menu.Items.Add(darkTheme);

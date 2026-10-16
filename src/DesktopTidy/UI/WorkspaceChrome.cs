@@ -14,6 +14,22 @@ namespace DesktopTidy.UI
             Opening += delegate { ApplyTheme(this, Theme.Read()); };
             Opened += delegate { ApplyRoundedCorners(this, EventArgs.Empty); };
         }
+        internal static ToolStripMenuItem CreateOpacityMenu(Func<int> current, Action<int> commit)
+        {
+            var menu = new ToolStripMenuItem("不透明度（25%～100%）");
+            var input = new NumericUpDown { Minimum = 25, Maximum = 100, Increment = 1, DecimalPlaces = 0,
+                Width = 150, AccessibleName = "工作区不透明度百分比，步进1%" };
+            var editor = new ToolStripControlHost(input);
+            menu.DropDownItems.Add(editor);
+            menu.DropDownItems.Add("应用不透明度", null, delegate { commit((int)input.Value); });
+            menu.DropDownOpening += delegate
+            {
+                Theme theme = Theme.Read();
+                input.BackColor = theme.Surface; input.ForeColor = theme.Text;
+                input.Font = menu.Font; input.Value = current();
+            };
+            return menu;
+        }
         private static void ApplyRoundedCorners(object sender, EventArgs e)
         {
             var strip = sender as ToolStrip;

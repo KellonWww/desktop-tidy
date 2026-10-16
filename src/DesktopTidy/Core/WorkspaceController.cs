@@ -142,6 +142,21 @@ namespace DesktopTidy.Core
         internal List<GroupState> WebGroups { get { return layout.Groups; } }
         internal List<WorkspaceItem> WebItems { get { return items; } }
         internal void DrawWebIcon(Graphics graphics, WorkspaceItem item, Rectangle bounds) { icons.Draw(graphics, item, bounds); }
+        internal void ResizeWebCategory(Category category, int width, int height)
+        {
+            GroupState state = layout.Groups.Find(delegate(GroupState value) { return value.Category == category; });
+            if (state == null) return;
+            int nextWidth = Math.Max(220, Math.Min(2000, width));
+            int nextHeight = Math.Max(140, Math.Min(2000, height));
+            if (state.Width == nextWidth && state.Height == nextHeight) return;
+            if (!Checkpoint()) return;
+            int previousWidth = state.Width, previousHeight = state.Height;
+            state.Width = nextWidth; state.Height = nextHeight;
+            if (!Save()) { state.Width = previousWidth; state.Height = previousHeight; return; }
+            ClassificationBox box = boxes.Find(delegate(ClassificationBox value) { return value.State.Category == category; });
+            if (box != null) box.ApplyState();
+            Notify("分类框尺寸已保存并自动对齐；可撤销。");
+        }
         internal void ToggleWebCategory(Category category)
         {
             var box = boxes.Find(delegate(ClassificationBox value) { return value.State.Category == category; });

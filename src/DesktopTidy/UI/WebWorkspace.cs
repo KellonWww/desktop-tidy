@@ -79,10 +79,14 @@ namespace DesktopTidy.UI
         }
         private void Fail(string message)
         {
-            if (stopped) return;
-            stopped = true; ready = false; updates.Stop(); deadline.Stop(); Visible = false;
-            host.WebFailed(message);
-            if (!browser.IsDisposed) browser.Dispose();
+            if (stopped || IsDisposed || Disposing) return;
+            stopped = true; ready = false;
+            try { updates.Stop(); deadline.Stop(); Visible = false; }
+            catch (Exception error) { Debug.WriteLine(error); }
+            try { host.WebFailed(message); }
+            catch (Exception error) { Debug.WriteLine(error); }
+            try { if (!browser.IsDisposed) browser.Dispose(); }
+            catch (Exception error) { Debug.WriteLine(error); }
         }
         internal void Feedback(string value) { feedback = value; Publish(); }
         internal void RefreshIcons() { iconData.Clear(); previous = null; }
@@ -122,7 +126,7 @@ namespace DesktopTidy.UI
                     foreach (var item in owner.WebItems)
                         if (item.Category == group.Category)
                             members.Add(new { id = TokenFor(item), name = item.Name, section = item.Section ?? "", icon = IconFor(item) });
-                    groups.Add(new { id = (int)group.Category, title = owner.CategoryTitle(group.Category), collapsed = group.Collapsed, sortByName = group.SortByName, items = members });
+                    groups.Add(new { id = (int)group.Category, title = owner.CategoryTitle(group.Category), collapsed = group.Collapsed, sortByName = group.SortByName, width = group.Width, height = group.Height, items = members });
                 }
                 Theme theme = Theme.Read();
                 string payload = json.Serialize(new { type = "state", groups = groups, total = owner.ItemCount, search = owner.SearchText,
@@ -137,6 +141,12 @@ namespace DesktopTidy.UI
         }
         private static string ReadText(Dictionary<string, object> data, string key)
         { object value; return data.TryGetValue(key, out value) ? value as string ?? string.Empty : string.Empty; }
+        private static int ReadInt(Dictionary<string, object> data, string key)
+        {
+            object value; int result;
+            if (!data.TryGetValue(key, out value) || value == null) return 0;
+            return int.TryParse(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture), out result) ? result : 0;
+        }
         private void Receive(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             if (stopped || !IsTrusted(e.Source)) return;
@@ -209,7 +219,8 @@ namespace DesktopTidy.UI
             if (!int.TryParse(ReadText(data, "category"), out categoryId)) return;
             Category category = (Category)categoryId;
             if (!owner.Categories.Contains(category)) return;
-            if (command == "assign" && item != null) owner.Assign(item, category);
+            if (command == "resizeCategory") owner.ResizeWebCategory(category, ReadInt(data, "width"), ReadInt(data, "height"));
+            else if (command == "assign" && item != null) owner.Assign(item, category);
             else if (command == "rename") owner.RenameCategory(category);
             else if (command == "delete") owner.DeleteCategory(category);
             else if (command == "collapse") owner.ToggleWebCategory(category);

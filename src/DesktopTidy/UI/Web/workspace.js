@@ -63,20 +63,14 @@
         node.setAttribute("aria-pressed", String(isSelected));
       });
     });
+    button.addEventListener("contextmenu", (event) => event.preventDefault());
     button.addEventListener("dblclick", () => send("open", { item: item.id }));
-    button.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      chooseCategory(button._item);
-    });
     button.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         send("open", { item: item.id });
       }
-      if (
-        (event.ctrlKey && event.key.toLowerCase() === "m") ||
-        (event.shiftKey && event.key === "F10")
-      ) {
+      if (event.ctrlKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
         chooseCategory(button._item);
       }
@@ -126,6 +120,87 @@
           "dragging-group",
         ),
       );
+  }
+  function gridMetrics() {
+    const grid = $("grid");
+    const style = getComputedStyle(grid);
+    const columns = style.gridTemplateColumns
+      .split(" ")
+      .filter((value) => value && value !== "none")
+      .map((value) => Number.parseFloat(value));
+    const columnGap = Number.parseFloat(style.columnGap) || 12;
+    const rowGap = Number.parseFloat(style.rowGap) || 12;
+    return {
+      columns: Math.max(1, columns.length),
+      column: columns[0] || 72,
+      columnGap,
+      row: Number.parseFloat(style.gridAutoRows) || 32,
+      rowGap,
+    };
+  }
+  function applyCardSize(card, group, requestedWidth, requestedHeight) {
+    const metrics = gridMetrics();
+    const width = Math.max(255, requestedWidth || group.width || 280);
+    const height = Math.max(220, requestedHeight || group.height || 260);
+    const columnSpan = Math.min(
+      metrics.columns,
+      Math.max(
+        Math.min(3, metrics.columns),
+        Math.round((width + metrics.columnGap) / (metrics.column + metrics.columnGap)),
+      ),
+    );
+    const rowSpan = card.classList.contains("collapsed")
+      ? 2
+      : Math.max(
+          5,
+          Math.min(
+            40,
+            Math.round((height + metrics.rowGap) / (metrics.row + metrics.rowGap)),
+          ),
+        );
+    card.style.gridColumnEnd = "span " + columnSpan;
+    card.style.gridRowEnd = "span " + rowSpan;
+  }
+  function beginCardResize(event, card) {
+    if (event.button !== 0 || !card._group || card._group.collapsed) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const handle = event.currentTarget;
+    const bounds = card.getBoundingClientRect();
+    const start = { x: event.clientX, y: event.clientY, width: bounds.width, height: bounds.height };
+    card.classList.add("resizing-card");
+    document.documentElement.classList.add("dragging-global");
+    handle.setPointerCapture(event.pointerId);
+    const move = (next) => {
+      applyCardSize(card, card._group, start.width + next.clientX - start.x, start.height + next.clientY - start.y);
+    };
+    const finish = (next, save) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", complete);
+      handle.removeEventListener("pointercancel", cancel);
+      if (handle.hasPointerCapture(next.pointerId)) handle.releasePointerCapture(next.pointerId);
+      card.classList.remove("resizing-card");
+      document.documentElement.classList.remove("dragging-global");
+      if (!save) { applyCardSize(card, card._group); return; }
+      const snapped = card.getBoundingClientRect();
+      card._group.width = Math.round(snapped.width);
+      card._group.height = Math.round(snapped.height);
+      send("resizeCategory", {
+        category: String(card._group.id),
+        width: String(card._group.width),
+        height: String(card._group.height),
+      });
+    };
+    const complete = (next) => finish(next, true);
+    const cancel = (next) => finish(next, false);
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", complete);
+    handle.addEventListener("pointercancel", cancel);
+  }
+  function refreshCardSizes() {
+    nodes.forEach((card) => {
+      if (!card.hidden && card._group) applyCardSize(card, card._group);
+    });
   }
   function dropTarget(node, id) {
     node.addEventListener("dragover", (event) => {
@@ -187,7 +262,12 @@
     header.append(mark, title, count, actions);
     const contents = element("div", "card-items");
     const footer = element("div", "card-footer");
-    footer.append(element("span"), element("span", "", "拖入归类"));
+    const resize = element("button", "card-resize", "◢");
+    resize.type = "button";
+    resize.title = "拖动调整分类框大小，松手后自动对齐";
+    resize.setAttribute("aria-label", "调整分类框大小");
+    resize.addEventListener("pointerdown", (event) => beginCardResize(event, card));
+    footer.append(element("span"), element("span", "", "拖入归类"), resize);
     card.append(header, contents, footer);
     dropTarget(card, group.id);
     card._parts = {
@@ -220,7 +300,9 @@
     part.title.textContent = group.title;
     part.count.textContent = String(source.length).padStart(2, "0");
     const shouldCollapse = group.collapsed && !query;
+    card._group = group;
     card.classList.toggle("collapsed", shouldCollapse);
+    applyCardSize(card, group);
     part.collapse.textContent = group.collapsed ? "+" : "−";
     part.collapse.classList.toggle("is-expanded", !shouldCollapse);
     part.contents.setAttribute("aria-hidden", String(shouldCollapse));
@@ -265,8 +347,8 @@
         part.items.set(item.id, node);
       }
       node._item = item;
-      node.title = `${item.name}\n双击打开 · 右键或 Ctrl+M 归类`;
-      node.setAttribute("aria-label", `${item.name}，Enter 打开，Ctrl+M 归类`);
+      node.title = `${item.name}\n双击打开 · 拖动归类 · Ctrl+M 归类`;
+      node.setAttribute("aria-label", `${item.name}，Enter 打开，拖动归类，Ctrl+M 归类`);
       node.firstChild.src = item.icon;
       node.lastChild.textContent = item.name;
       node.classList.toggle("selected", selected === item.id);
@@ -585,6 +667,7 @@
       gsap.set(".category-card,.overview,#feedback", { clearProps: "all" });
     }
   });
+  if (window.ResizeObserver) new ResizeObserver(refreshCardSizes).observe($("grid"));
   bridge?.addEventListener("message", (event) => {
     if (event.data?.type === "state") render(event.data);
     if (event.data?.type === "focusSearch") {

@@ -449,10 +449,11 @@ h1 > span {
 }
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  grid-auto-rows: 32px;
   grid-auto-flow: row dense;
-  gap: 16px;
-  align-items: start;
+  gap: 12px;
+  align-items: stretch;
   padding: 0 0 8px;
 }
 .category-card {
@@ -1043,4 +1044,45 @@ input[type="checkbox"] {
 }
 .card-items:has(.section-label) .item {
   height: 93px;
+}
+
+
+/* Resizable category cards snap to the shared grid so mixed sizes stay aligned. */
+.category-card {
+  height: 100%;
+  overflow: hidden;
+}
+.category-card.resizing-card {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  transform: none;
+  user-select: none;
+}
+.card-items {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+}
+.card-footer {
+  align-items: center;
+  gap: 8px;
+}
+.card-footer > span:nth-child(2) {
+  margin-left: auto;
+}
+.card-resize {
+  color: var(--muted);
+  cursor: nwse-resize;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 0 0 4px;
+  touch-action: none;
+}
+.card-resize:hover,
+.card-resize:focus-visible {
+  color: var(--accent);
+}
+.category-card.collapsed .card-resize {
+  display: none;
 }

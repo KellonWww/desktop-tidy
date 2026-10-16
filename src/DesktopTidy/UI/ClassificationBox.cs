@@ -64,6 +64,7 @@ namespace DesktopTidy.UI
             var collapseAll = menu.Items.Add("折叠全部分类框", null, delegate { owner.ToggleGroupsCollapsed(); });
             menu.Opening += delegate { collapseAll.Text = owner.AllGroupsCollapsed ? "展开全部分类框" : "折叠全部分类框"; };
             menu.Items.Add("隐藏工作区", null, delegate { owner.RequestHide(); });
+            menu.Opening += OpenContextMenu;
             ContextMenuStrip = menu;
             motion.Tick += delegate { AdvanceMotion(); };
             RefreshTheme(); ApplyState();
@@ -214,6 +215,10 @@ namespace DesktopTidy.UI
         {
             return point.Y >= 0 && point.Y < HeaderHeight &&
                 (point.X > Width - 42 || (!IsSearchResults && point.X >= Width - 144 && point.X < Width - 90));
+        }
+        private void OpenContextMenu(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (Hit(PointToClient(Cursor.Position)) >= 0) e.Cancel = true;
         }
         protected override void OnMouseDown(MouseEventArgs e)
         {

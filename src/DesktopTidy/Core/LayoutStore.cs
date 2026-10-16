@@ -83,12 +83,11 @@ namespace DesktopTidy.Core
         }
         internal static int NormalizeOpacity(int value)
         {
-            value = Math.Max(25, Math.Min(100, value));
-            return (int)Math.Round(value / 25.0, MidpointRounding.AwayFromZero) * 25;
+            return Math.Max(25, Math.Min(100, value));
         }
         private static void Validate(LayoutState state)
         {
-            if (state == null || state.Schema != 2 || state.OpacityPercent < 25 || state.OpacityPercent > 100 || state.OpacityPercent % 25 != 0 || state.Groups == null || state.Assignments == null || state.DeletedCategories == null || state.DeletedCategories.Count > Enum.GetValues(typeof(Category)).Length || state.Groups.Count > Enum.GetValues(typeof(Category)).Length || state.Assignments.Count > 3000) throw new InvalidDataException("布局格式不受支持");
+            if (state == null || state.Schema != 2 || state.OpacityPercent < 25 || state.OpacityPercent > 100 || state.Groups == null || state.Assignments == null || state.DeletedCategories == null || state.DeletedCategories.Count > Enum.GetValues(typeof(Category)).Length || state.Groups.Count > Enum.GetValues(typeof(Category)).Length || state.Assignments.Count > 3000) throw new InvalidDataException("布局格式不受支持");
             if (state.WorkspaceWidth != 0 || state.WorkspaceHeight != 0)
                 if (state.WorkspaceWidth < 320 || state.WorkspaceWidth > 16384 || state.WorkspaceHeight < 200 || state.WorkspaceHeight > 16384 || Math.Abs((long)state.WorkspaceX) > 100000 || Math.Abs((long)state.WorkspaceY) > 100000)
                     throw new InvalidDataException("工作区窗口边界无效");

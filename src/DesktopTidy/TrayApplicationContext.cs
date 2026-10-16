@@ -33,19 +33,9 @@ namespace DesktopTidy
             menu.Items.Add("隐藏工作区", null, delegate { if (workspace != null) workspace.RequestHide(); });
             var toggleGroups = menu.Items.Add("折叠全部分类框", null, delegate { if (workspace != null) workspace.ToggleGroupsCollapsed(); });
             menu.Opening += delegate { toggleGroups.Enabled = workspace != null && workspace.Visible; toggleGroups.Text = workspace != null && workspace.AllGroupsCollapsed ? "展开全部分类框" : "折叠全部分类框"; };
-            var opacityMenu = new ToolStripMenuItem("透明度（最低25%）");
-            for (int i = 1; i <= 4; i++)
-            {
-                int value = i * 25;
-                var choice = new ToolStripMenuItem(value + "%");
-                choice.Click += delegate { GetWorkspace().CommitOpacity(value); };
-                choice.Tag = value; opacityMenu.DropDownItems.Add(choice);
-            }
-            opacityMenu.DropDownOpening += delegate
-            {
-                foreach (ToolStripMenuItem choice in opacityMenu.DropDownItems)
-                    choice.Checked = (int)choice.Tag == GetWorkspace().OpacityPercent;
-            };
+            var opacityMenu = WorkspaceMenu.CreateOpacityMenu(
+                delegate { return GetWorkspace().OpacityPercent; },
+                delegate(int value) { GetWorkspace().CommitOpacity(value); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(opacityMenu);
             menu.Items.Add(new ToolStripSeparator());
