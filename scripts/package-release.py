@@ -9,7 +9,7 @@ import zipfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build-dir', type=Path, default=Path('build/prototype'))
-    parser.add_argument('--version', default='v0.1.0-preview')
+    parser.add_argument('--version', default='v0.3.0-preview')
     parser.add_argument('--output-dir', type=Path, default=Path('dist'))
     args = parser.parse_args()
     if not args.version or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_' for c in args.version):

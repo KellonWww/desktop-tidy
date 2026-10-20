@@ -1,7 +1,7 @@
 # Desktop Tidy · 桌面整理
 
 轻量 Windows 桌面整理工具：自动分类、搜索、拖动归类、自定义排列与明暗主题。
-当前为 **v0.2.0 预览版、免安装 ZIP**；整理与拖动分类不会移动或删除桌面原文件。
+当前为 **v0.3.0 预览版、免安装 ZIP**；整理与拖动分类不会移动或删除桌面原文件。
 
 ## 界面预览
 
@@ -19,7 +19,7 @@
 ## 下载与安装
 
 1. 打开 [Releases](https://github.com/KellonWww/desktop-tidy/releases)，选择最新预览版。
-2. 下载 **DesktopTidy-v0.2.0-preview-win-x64.zip**，不要下载 Source code 压缩包。
+2. 下载 **DesktopTidy-v0.3.0-preview-win-x64.zip**，不要下载 Source code 压缩包。
 3. 右键 ZIP → 全部解压，将整个目录放在固定位置，例如 `D:/Apps/DesktopTidy`。
 4. 双击 `DesktopTidy.exe`，保留同目录的 `DesktopTidy.exe.config`。
 5. 可右键 EXE 创建快捷方式；不需要安装 Python 或开发工具。
@@ -41,7 +41,7 @@
 在 Windows 命令提示符执行下列命令，并与 Release 页面公布的 SHA-256 比对：
 
 ```bat
-certutil -hashfile DesktopTidy-v0.2.0-preview-win-x64.zip SHA256
+certutil -hashfile DesktopTidy-v0.3.0-preview-win-x64.zip SHA256
 ```
 
 ## 第一次使用
@@ -99,7 +99,7 @@ certutil -hashfile DesktopTidy-v0.2.0-preview-win-x64.zip SHA256
 ## 开发与构建
 
 主程序为 **C# 5 + WinForms + WebView2 + .NET Framework 4.8，Release x64**。
-`tidy/` 是保留的早期 Python 草稿，不是发布版的启动入口。
+开发启动入口统一为 build/prototype/DesktopTidy.exe；早期 Python 草稿与历史构建已移除。
 
 使用 Visual Studio / MSBuild 与 .NET Framework 4.8 Targeting Pack：
 
@@ -111,7 +111,7 @@ msbuild DesktopTidy.sln /p:Configuration=Release /p:Platform=x64
 
 ```bash
 bash scripts/build.sh
-python scripts/package-release.py --build-dir build/prototype --version v0.2.0-preview
+python scripts/package-release.py
 ```
 
 本地启动目录统一为 `build/prototype/`，后续构建直接更新其中的 `DesktopTidy.exe`，不再按功能另建启动目录。
