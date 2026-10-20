@@ -207,6 +207,16 @@ namespace DesktopTidy.UI
             if (command == "move" || command == "resize") { host.BeginWebGesture(command == "resize"); return; }
             WorkspaceItem item;
             if (!tokenItems.TryGetValue(ReadText(data, "item"), out item) || !owner.WebItems.Contains(item)) item = null;
+            if (command == "itemMenu")
+            {
+                if (item != null)
+                {
+                    int x = Math.Max(0, Math.Min(browser.ClientSize.Width - 1, ReadInt(data, "x")));
+                    int y = Math.Max(0, Math.Min(browser.ClientSize.Height - 1, ReadInt(data, "y")));
+                    owner.ShowItemMenu(item, browser.PointToScreen(new Point(x, y)));
+                }
+                return;
+            }
             if (command == "open")
             {
                 if (item == null) return;

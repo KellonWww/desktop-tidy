@@ -46,6 +46,7 @@ namespace DesktopTidy.Core
         {
             this.font = font; this.notify = notify; store = new LayoutStore(directory); layout = store.Load();
             EnsureGroups(); nextSortDescending = layout.OrderMode != CategoryOrderMode.CountDescending;
+            itemChanges.Tick += ApplyItemChanges;
         }
         private void EnsureGroups()
         {
@@ -114,7 +115,7 @@ namespace DesktopTidy.Core
                 AutoScaleDimensions = new SizeF(96F, 96F), AutoScaleMode = AutoScaleMode.Dpi })
             {
                 var explanation = new Label { Left = 20, Top = 18, Width = 440, Height = 84,
-                    Text = "这里只整理图标的显示，不搬动、删除原文件。\n双击图标打开文件，拖入分类框只改变归属。\n可从托盘显示/隐藏工作区；隐藏或退出会恢复原生图标的原状态。" };
+                    Text = "分类与拖动只改变显示；图标右键可操作真实文件。\n双击打开，右键可重命名、删除或修改快捷方式属性。\n可从托盘显示/隐藏工作区；隐藏或退出会恢复原生图标的原状态。" };
                 var hide = new CheckBox { Left = 20, Top = 108, Width = 440, Height = 48, Checked = false,
                     Text = "工作区显示成功后隐藏原生桌面图标（默认保留）", AccessibleName = "是否隐藏原生桌面图标，默认不隐藏" };
                 var enter = new RoundedButton { Height = 32, Text = "进入工作区", Left = 230, Top = 184, Width = 110, DialogResult = DialogResult.OK };
@@ -239,6 +240,168 @@ namespace DesktopTidy.Core
             container.RefreshScroll();
         }
         internal void ClearSearch() { if (container != null) container.ClearSearch(); else SetSearch(string.Empty); }
+        private bool itemOperation;
+        private readonly Dictionary<string, FileSystemWatcher> itemWatchers = new Dictionary<string, FileSystemWatcher>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> changedItemPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Timer itemChanges = new Timer { Interval = 500 };
+        private void WatchItemChanges(WorkspaceItem item)
+        {
+            string directory = Path.GetDirectoryName(item.Path);
+            if (itemWatchers.ContainsKey(directory)) return;
+            FileSystemWatcher watcher = null;
+            try
+            {
+                watcher = new FileSystemWatcher(directory) { NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size };
+                watcher.Changed += delegate(object sender, FileSystemEventArgs e) { QueueItemChange(e.FullPath); };
+                watcher.Created += delegate(object sender, FileSystemEventArgs e) { QueueItemChange(e.FullPath); };
+                watcher.Deleted += delegate(object sender, FileSystemEventArgs e) { QueueItemChange(e.FullPath); };
+                watcher.Renamed += delegate(object sender, RenamedEventArgs e) { QueueItemChange(e.OldFullPath); QueueItemChange(e.FullPath); };
+                watcher.Error += delegate { QueueItemChange(string.Empty); };
+                watcher.EnableRaisingEvents = true; itemWatchers.Add(directory, watcher);
+            }
+            catch (Exception error)
+            {
+                if (watcher != null) watcher.Dispose();
+                if (!ExpectedItemError(error)) throw;
+                Notify("文件变化监测不可用，修改属性后请点击刷新。");
+            }
+        }
+        private void QueueItemChange(string path)
+        {
+            var target = container;
+            if (disposed || target == null || target.IsDisposed || !target.IsHandleCreated) return;
+            try
+            {
+                target.BeginInvoke((Action)delegate
+                {
+                    if (disposed) return;
+                    changedItemPaths.Add(path); itemChanges.Stop(); itemChanges.Start();
+                });
+            }
+            catch (InvalidOperationException) { /* Window was destroyed between checking and posting. */ }
+        }
+        private void ApplyItemChanges(object sender, EventArgs e)
+        {
+            if (disposed) { itemChanges.Stop(); return; }
+            if (itemOperation || refreshing) return;
+            itemChanges.Stop();
+            foreach (var item in items)
+                if (changedItemPaths.Contains(item.Path) || changedItemPaths.Contains(string.Empty))
+                    icons.Refresh(item, delegate { if (IconReady != null) IconReady(); });
+            changedItemPaths.Clear(); InvalidateIcons(); RequestRefresh();
+        }
+        private bool CurrentFileItem(WorkspaceItem item)
+        {
+            if (disposed || item == null || !items.Contains(item)) return false;
+            if (File.Exists(item.Path) || Directory.Exists(item.Path)) return true;
+            Notify("文件已不存在，请刷新工作区。"); RequestRefresh(); return false;
+        }
+        internal void ShowItemMenu(WorkspaceItem item, Point screenPosition)
+        {
+            if (itemOperation || !CurrentFileItem(item)) return;
+            itemOperation = true;
+            try
+            {
+                WatchItemChanges(item);
+                ShellItemMenu.Show(item.Path, screenPosition, delegate { RenameItem(item); },
+                    delegate { DeleteItem(item); }, delegate { RefreshChangedItem(item); });
+            }
+            catch (Exception error)
+            {
+                if (!ExpectedItemError(error)) throw;
+                Notify("系统菜单操作未完成：" + error.Message);
+            }
+            finally { itemOperation = false; }
+        }
+        private static bool ExpectedItemError(Exception error)
+        {
+            return error is System.Runtime.InteropServices.COMException || error is IOException ||
+                error is UnauthorizedAccessException || error is System.ComponentModel.Win32Exception ||
+                error is ArgumentException || error is NotSupportedException || error is System.Security.SecurityException;
+        }
+        private void RefreshChangedItem(WorkspaceItem item)
+        {
+            if (disposed) return;
+            icons.Refresh(item, delegate { if (IconReady != null) IconReady(); });
+            InvalidateIcons(); RequestRefresh();
+        }
+        private void DeleteItem(WorkspaceItem item)
+        {
+            if (!CurrentFileItem(item)) return;
+            string message = "将删除真实桌面项目：" + item.Name + "\n优先移入回收站；无法回收时，系统会另行确认。\n删除快捷方式不会卸载目标程序。\n工作区 Ctrl+Z 不能恢复文件，请到回收站还原。";
+            if (!WorkspaceDialog.Confirm("删除桌面项目", message, "删除", font)) return;
+            try
+            {
+                using (var dialogOwner = new WorkspaceDialog { Opacity = 0, ClientSize = new Size(1, 1) })
+                {
+                    dialogOwner.Show();
+                    if (!ShellItemMenu.Recycle(item.Path, dialogOwner.Handle))
+                    { Notify("删除已取消或未完成，图标保持不变。"); RequestRefresh(); return; }
+                }
+                if (File.Exists(item.Path) || Directory.Exists(item.Path))
+                { Notify("文件未删除，图标保持不变。"); return; }
+                items.Remove(item); RefreshItems(); RequestRefresh();
+                Notify("已删除桌面项目；如已进入回收站，可在回收站还原。工作区撤销不恢复文件。");
+            }
+            catch (Exception error)
+            {
+                if (!ExpectedItemError(error)) throw;
+                Notify("删除未完成：" + error.Message); RequestRefresh();
+            }
+        }
+        private void RenameItem(WorkspaceItem item)
+        {
+            if (!CurrentFileItem(item)) return;
+            string original = Path.GetFileName(item.Path);
+            using (var dialog = new WorkspaceDialog { Text = "重命名桌面项目", Font = font, ClientSize = new Size(500, 304) })
+            {
+                dialog.AddHeading("重命名项目", "修改桌面上的真实文件名，请保留需要的扩展名。");
+                var label = new Label { Text = "文件名称", Left = 24, Top = 102, Width = 452, Height = 22 };
+                var field = new WorkspaceTextField(original, 255, "真实文件名，包含扩展名") { Left = 22, Top = 128, Width = 456, TabIndex = 0 };
+                var input = field.Editor;
+                var hint = new Label { Tag = "muted", Text = "修改真实文件名（包含扩展名）；工作区 Ctrl+Z 不撤销此操作。", Left = 24, Top = 184, Width = 452, Height = 48 };
+                var confirm = new RoundedButton { Text = "重命名", Left = 380, Top = 254, Width = 96, Height = 36, TabIndex = 2 };
+                var cancel = new RoundedButton { Text = "取消", Secondary = true, Left = 272, Top = 254, Width = 96, Height = 36, TabIndex = 1, DialogResult = DialogResult.Cancel };
+                confirm.Click += delegate
+                {
+                    if (!CurrentFileItem(item)) { dialog.Close(); return; }
+                    string name = input.Text;
+                    if (string.IsNullOrWhiteSpace(name) || name == "." || name == ".." ||
+                        name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(" ", StringComparison.Ordinal))
+                    { field.Invalid = true; hint.Text = "请输入合法文件名，不能包含路径、非法字符或以点、空格结尾。"; return; }
+                    if (name == original) { dialog.Close(); return; }
+                    string destination = Path.Combine(Path.GetDirectoryName(item.Path), name);
+                    if (!string.Equals(item.Path, destination, StringComparison.OrdinalIgnoreCase) && (File.Exists(destination) || Directory.Exists(destination)))
+                    { field.Invalid = true; hint.Text = "同名项目已存在，请换个名称；不会覆盖原文件。"; return; }
+                    if (!item.IsDirectory && !string.Equals(Path.GetExtension(original), Path.GetExtension(name), StringComparison.OrdinalIgnoreCase) &&
+                        !WorkspaceDialog.Confirm("更改文件扩展名", "更改扩展名可能导致文件或快捷方式无法正常打开。是否继续？", "仍然更改", font)) return;
+                    try
+                    {
+                        if (!ShellItemMenu.Rename(item.Path, name, dialog.Handle)) { field.Invalid = true; hint.Text = "重命名已取消或未完成。"; return; }
+                        if ((!File.Exists(destination) && !Directory.Exists(destination)) ||
+                            (!string.Equals(item.Path, destination, StringComparison.OrdinalIgnoreCase) && (File.Exists(item.Path) || Directory.Exists(item.Path))))
+                        { field.Invalid = true; hint.Text = "系统未完成重命名，请刷新后重试。"; RequestRefresh(); return; }
+                        string previousIdentity = item.Identity;
+                        layout.Assignments.RemoveAll(delegate(Assignment assignment) { return string.Equals(assignment.Identity, destination, StringComparison.OrdinalIgnoreCase) && !string.Equals(assignment.Identity, previousIdentity, StringComparison.OrdinalIgnoreCase); });
+                        foreach (var assignment in layout.Assignments)
+                            if (string.Equals(assignment.Identity, previousIdentity, StringComparison.OrdinalIgnoreCase)) assignment.Identity = destination;
+                        item.Identity = item.Path = destination; item.Name = name;
+                        bool saved = Save(); RefreshItems(); RefreshChangedItem(item);
+                        Notify(saved ? "真实文件已重命名，手动分类已保留；工作区撤销不撤销文件重命名。" : "文件已重命名，但分类保存失败；请检查目录权限后重试保存。");
+                        dialog.Close();
+                    }
+                    catch (Exception error)
+                    {
+                        if (!ExpectedItemError(error)) throw;
+                        field.Invalid = true; hint.Text = "重命名未完成：" + error.Message; RequestRefresh();
+                    }
+                };
+                dialog.Controls.AddRange(new Control[] { label, field, hint, cancel, confirm });
+                dialog.AcceptButton = confirm; dialog.CancelButton = cancel; dialog.ApplyTheme();
+                dialog.Shown += delegate { input.Focus(); input.Select(0, item.IsDirectory ? original.Length : Math.Max(1, original.Length - Path.GetExtension(original).Length)); };
+                dialog.ShowDialog();
+            }
+        }
         internal void RequestRefresh()
         {
             if (refreshing) return;
@@ -554,16 +717,20 @@ namespace DesktopTidy.Core
         private void EditCategoryName(string title, string initial, Func<string, bool> apply)
         {
             if (categoryEditor != null && !categoryEditor.IsDisposed) { categoryEditor.Activate(); return; }
-            var dialog = new WorkspaceDialog { Text = title, Font = font, Icon = AppBrand.Icon, ClientSize = new Size(360, 150),
+            var dialog = new WorkspaceDialog { Text = title, Font = font, Icon = AppBrand.Icon, ClientSize = new Size(440, 300),
                 FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
                 StartPosition = FormStartPosition.CenterScreen, AutoScaleDimensions = new SizeF(96F, 96F), AutoScaleMode = AutoScaleMode.Dpi };
-            var input = new TextBox { Text = initial, MaxLength = 40, Left = 18, Top = 18, Width = 324, AccessibleName = "分类名称，最多40字" };
-            var hint = new Label { Tag = "muted", Text = "不搬动或删除原文件；手动归属优先", Left = 18, Top = 52, Width = 324, Height = 30 };
-            var confirm = new RoundedButton { Height = 32, Text = "保存", Left = 162, Top = 102, Width = 80 };
-            var cancel = new RoundedButton { Height = 32, Secondary = true, Text = "取消", Left = 262, Top = 102, Width = 80 };
-            confirm.Click += delegate { if (disposed) { dialog.Close(); return; } if (apply(input.Text.Trim())) dialog.Close(); else hint.Text = categoryEditError ?? "保存未完成，请检查工作区提示。"; };
+            dialog.AddHeading(title, "给这一组桌面图标，一个好找的名字。");
+            var label = new Label { Text = "分类名称", Left = 24, Top = 102, Width = 280, Height = 22 };
+            var limit = new Label { Tag = "muted", Text = "最多 40 字", TextAlign = ContentAlignment.TopRight, Left = 312, Top = 102, Width = 104, Height = 22 };
+            var field = new WorkspaceTextField(initial, 40, "分类名称，最多40字") { Left = 22, Top = 128, Width = 396, TabIndex = 0 };
+            var input = field.Editor;
+            var hint = new Label { Tag = "muted", Text = "不搬动或删除原文件；手动归属优先", Left = 24, Top = 182, Width = 392, Height = 46 };
+            var confirm = new RoundedButton { Height = 36, Text = "保存", Left = 320, Top = 250, Width = 96, TabIndex = 2 };
+            var cancel = new RoundedButton { Height = 36, Secondary = true, Text = "取消", Left = 212, Top = 250, Width = 96, TabIndex = 1 };
+            confirm.Click += delegate { if (disposed) { dialog.Close(); return; } if (apply(input.Text.Trim())) dialog.Close(); else { field.Invalid = true; hint.Text = categoryEditError ?? "保存未完成，请检查工作区提示。"; } };
             cancel.Click += delegate { dialog.Close(); }; dialog.AcceptButton = confirm; dialog.CancelButton = cancel;
-            dialog.Controls.AddRange(new Control[] { input, hint, confirm, cancel }); categoryEditor = dialog;
+            dialog.Controls.AddRange(new Control[] { label, limit, field, hint, cancel, confirm }); categoryEditor = dialog;
             dialog.FormClosed += delegate { if (ReferenceEquals(categoryEditor, dialog)) categoryEditor = null; dialog.Dispose(); };
             dialog.ApplyTheme(); dialog.Show(); input.Focus(); input.SelectAll();
         }
@@ -696,6 +863,9 @@ namespace DesktopTidy.Core
             finally
             {
                 // Restoration must not depend on successfully persisting the layout.
+                itemChanges.Dispose();
+                foreach (var watcher in itemWatchers.Values) watcher.Dispose();
+                itemWatchers.Clear(); changedItemPaths.Clear();
                 desktopVisibility.Dispose(); CloseBoxes(); icons.Dispose(); items.Clear();
             }
         }

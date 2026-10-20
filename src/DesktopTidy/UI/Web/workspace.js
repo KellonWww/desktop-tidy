@@ -45,6 +45,16 @@
     }
     if (!$("assign-dialog").open) $("assign-dialog").showModal();
   }
+  function showItemMenu(button, item, event) {
+    const rect = button.getBoundingClientRect();
+    const pointer = event?.button === 2;
+    const scale = window.devicePixelRatio || 1;
+    send("itemMenu", {
+      item: item.id,
+      x: Math.round((pointer ? event.clientX : rect.left + 16) * scale),
+      y: Math.round((pointer ? event.clientY : rect.top + 16) * scale),
+    });
+  }
   function makeItem(item) {
     const button = element("button", "item");
     button.dataset.item = item.id;
@@ -63,9 +73,21 @@
         node.setAttribute("aria-pressed", String(isSelected));
       });
     });
-    button.addEventListener("contextmenu", (event) => event.preventDefault());
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.click();
+      button.focus();
+      showItemMenu(button, item, event);
+    });
     button.addEventListener("dblclick", () => send("open", { item: item.id }));
     button.addEventListener("keydown", (event) => {
+      if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+        event.preventDefault();
+        event.stopPropagation();
+        showItemMenu(button, item);
+        return;
+      }
       if (event.key === "Enter") {
         event.preventDefault();
         send("open", { item: item.id });

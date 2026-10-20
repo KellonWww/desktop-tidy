@@ -782,10 +782,10 @@ dialog {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 17px;
-  padding: 25px;
-  width: min(390px, calc(100vw - 36px));
+  padding: 28px;
+  width: min(420px, calc(100vw - 36px));
   max-height: 85vh;
-  box-shadow: 0 20px 80px #0003;
+  box-shadow: var(--shadow);
   overflow: auto;
 }
 dialog[open] {
@@ -803,6 +803,7 @@ dialog::backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 .dialog-header h2 {
   font-size: 20px;
@@ -811,12 +812,20 @@ dialog::backdrop {
 .dialog-header button {
   font-size: 24px;
   color: var(--muted);
-  padding: 0 3px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  line-height: 1;
+}
+.dialog-header button:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 .dialog-caption {
   color: var(--muted);
-  font-size: 11px;
-  margin: 10px 0 25px;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 8px 0 24px;
   overflow-wrap: anywhere;
 }
 .setting-row {
@@ -828,10 +837,41 @@ dialog::backdrop {
   font-size: 12px;
   gap: 12px;
 }
-input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 16px;
-  height: 16px;
+dialog input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--rail);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+dialog input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+dialog input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+dialog input[type="checkbox"]:checked::before {
+  transform: translateX(16px);
+  background: var(--on-accent);
+}
+dialog input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .system-theme-button {
   width: 100%;
@@ -865,7 +905,9 @@ input[type="checkbox"] {
 #opacity {
   width: 100%;
   accent-color: var(--accent);
-  margin: 18px 0 23px;
+  height: 22px;
+  cursor: pointer;
+  margin: 14px 0 20px;
 }
 .settings-actions {
   display: grid;
@@ -994,6 +1036,14 @@ input[type="checkbox"] {
   }
 }
 @media (forced-colors: active) {
+  dialog input[type="checkbox"] {
+    appearance: auto;
+    width: 22px;
+    height: 22px;
+  }
+  dialog input[type="checkbox"]::before {
+    display: none;
+  }
   button,
   .category-card,
   .search-box {

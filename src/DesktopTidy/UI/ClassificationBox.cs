@@ -218,7 +218,13 @@ namespace DesktopTidy.UI
         }
         private void OpenContextMenu(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (Hit(PointToClient(Cursor.Position)) >= 0) e.Cancel = true;
+            int index = Hit(PointToClient(Cursor.Position));
+            if (index >= 0)
+            {
+                e.Cancel = true; selected = index; Invalidate();
+                WorkspaceItem item = items[index]; Point position = Cursor.Position;
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowItemMenu(item, position); });
+            }
         }
         protected override void OnMouseDown(MouseEventArgs e)
         {
@@ -275,7 +281,17 @@ namespace DesktopTidy.UI
             Invalidate();
             committing = false;
         }
-        protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); EndChange(); }
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e); EndChange();
+            int index = Hit(e.Location);
+            if (IsSearchResults && e.Button == MouseButtons.Right && index >= 0)
+            {
+                selected = index; Invalidate();
+                WorkspaceItem item = items[index]; Point position = PointToScreen(e.Location);
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowItemMenu(item, position); });
+            }
+        }
         protected override void OnMouseCaptureChanged(EventArgs e) { base.OnMouseCaptureChanged(e); if (!Capture) EndChange(); }
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -1; Cursor = Cursors.Default; Invalidate(); }
         protected override void OnMouseWheel(MouseEventArgs e)
@@ -300,6 +316,12 @@ namespace DesktopTidy.UI
             base.OnKeyDown(e);
             if (e.Control && e.KeyCode == Keys.F) { owner.FocusSearch(); e.Handled = true; }
             else if (e.Control && e.KeyCode == Keys.Z) { owner.Undo(); e.Handled = true; }
+            else if ((e.KeyCode == Keys.Apps || (e.Shift && e.KeyCode == Keys.F10)) && selected >= 0)
+            {
+                e.Handled = true; e.SuppressKeyPress = true;
+                WorkspaceItem item = items[selected]; Point position = PointToScreen(Cell(selected).Location);
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowItemMenu(item, position); });
+            }
             else if (e.KeyCode == Keys.Enter && selected >= 0) { Open(items[selected]); e.Handled = true; }
             else if (e.KeyCode == Keys.Escape)
             {
