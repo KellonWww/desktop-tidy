@@ -1,6 +1,6 @@
-# Desktop Tidy · 桌面整理
+﻿# Desktop Tidy · 桌面整理
 
-轻量 Windows 桌面整理工具：自动分类、搜索、拖动归类、自定义排列与明暗主题。
+轻量 Windows 桌面整理工具：自动分类、搜索、拖动归类、自定义排列、明暗主题与本地便签。
 当前为 **v0.3.0 预览版、免安装 ZIP**；整理与拖动分类不会移动或删除桌面原文件。
 
 ## 界面预览
@@ -57,6 +57,9 @@ certutil -hashfile DesktopTidy-v0.3.0-preview-win-x64.zip SHA256
 | 操作 | 使用方式 |
 |---|---|
 | 应用自动分类 | 按应用名、快捷方式目标、程序信息和网址识别娱乐 / 聊天 / 设计等；娱乐内分音乐、影视、游戏、社交，未知应用进入待分类 |
+| 便签 | 左栏「便签」→ 新建，支持文本 / TODO、编辑、复制、筛选；标题与内容至少填一项，点击保存后持久化 |
+| 边缘便签 | 默认开启：鼠标贴屏幕左边缘停留约 300ms 呼出；与工作区共用便签，独立于桌面分类 |
+| TODO 完成状态 | 在便签卡片上勾选完成 / 取消完成；删除需确认且不参与 Ctrl+Z；仅网页工作区提供便签入口 |
 | 手动纠正 | 拖入目标分类后记住归属，刷新不覆盖；重新自动分类清除手动归属，可撤销 |
 | 搜索 | 左栏按名称过滤；Ctrl+F 聚焦，Esc 清空搜索 |
 | 分类排序 | 数量排序切换升序 / 降序；刷新不覆盖自定义排列 |
@@ -66,6 +69,16 @@ certutil -hashfile DesktopTidy-v0.3.0-preview-win-x64.zip SHA256
 | 收起工作区 | 点击收起并确认；程序保留在托盘，原生图标恢复操作前状态 |
 | 重新显示 | 托盘右键 → 显示分类窗口；图标可能在任务栏 ↑ 中 |
 | 完全退出 | 托盘右键 → 退出；退出时请求显示原生桌面图标，并确认结果 |
+
+### 边缘便签
+
+- 鼠标离开面板约 600ms 后自动收起，也可点右上角「收起」或在非编辑状态按 Esc；四角不触发，避免干扰系统手势。
+- 编辑 / 删除确认与保存过程中不自动收起；手动收起保留未关闭的编辑草稿，草稿仍需点击保存才会持久化。
+- 左侧采用紧凑便签抽屉，沿用工作区的明暗主题；每次呼出恢复「全部」筛选并重新同步，保存后立即推送到另一视图。
+- 工作区与边缘面板共用一份本机数据；同时编辑发生冲突时拒绝旧版本覆盖并保留草稿，请重新打开编辑后合并。
+- 原便签页「贴边呼出」或托盘「鼠标贴边呼出便签」可开关；关闭后仍能从托盘「打开边缘便签」。设置保存在当前用户注册表 `Software\DesktopTidy\Preferences` 的 `EdgeNotesEnabled`。
+- 面板不挤占屏幕、不移动或隐藏分类区；全屏应用前台时暂停自动呼出。展开不抢焦点，点击后可编辑。
+- 依赖 WebView2；加载失败可从托盘重新打开重试，原便签数据与分类区不受影响。真实混合 DPI 多屏、全屏游戏及长期驻留兼容性仍需人工验收。
 
 ### 文件与图标保护
 
@@ -83,13 +96,14 @@ certutil -hashfile DesktopTidy-v0.3.0-preview-win-x64.zip SHA256
 程序使用单实例锁，旧版未退出时再次运行不会打开第二个实例。
 
 **卸载：** 完全退出后删除解压目录和手动创建的快捷方式。
-清除个人设置时，再手动删除 `%LOCALAPPDATA%/DesktopTidy`；将丢失布局、分类、备份和日志。
+清除个人设置时，再手动删除 `%LOCALAPPDATA%/DesktopTidy`；将丢失便签、布局、分类、备份和日志。
 
 ## 配置与常见问题
 
+- 便签：`%LOCALAPPDATA%/DesktopTidy/notes.json`（上次保存的备份为 `notes.json.bak`），仅保存在本机；最多 200 条，每条标题 80 字、正文 2000 字。读取异常时保留原文件并禁止覆盖，请先备份再排查。
 - 布局、撤销与图标位置快照：`%LOCALAPPDATA%/DesktopTidy/Workspace/`。
 - 错误日志：`%LOCALAPPDATA%/DesktopTidy/Prototype/error.log`，发生错误时生成。
-- 配置和快照可能含文件名、完整路径；反馈前脱敏，不要公开上传。
+- 便签、配置和快照可能含个人文本、文件名、完整路径；反馈前脱敏，不要公开上传。
 - **缺少 .NET：** 安装 .NET Framework 4.8 运行时后重试。
 - **双击没反应：** 检查托盘是否有旧版，退出旧版再启动；仍失败时查看错误日志。
 - **收起后找不到：** 在任务栏 ↑ 中查找托盘图标，右键显示分类窗口。
@@ -99,7 +113,7 @@ certutil -hashfile DesktopTidy-v0.3.0-preview-win-x64.zip SHA256
 ## 开发与构建
 
 主程序为 **C# 5 + WinForms + WebView2 + .NET Framework 4.8，Release x64**。
-开发启动入口统一为 build/prototype/DesktopTidy.exe；早期 Python 草稿与历史构建已移除。
+开发启动入口统一为 build/notes-dpi-fixed/DesktopTidy.exe；这是已验收的唯一最新版；历史构建已移除。
 
 使用 Visual Studio / MSBuild 与 .NET Framework 4.8 Targeting Pack：
 
@@ -114,9 +128,9 @@ bash scripts/build.sh
 python scripts/package-release.py
 ```
 
-本地启动目录统一为 `build/prototype/`，后续构建直接更新其中的 `DesktopTidy.exe`，不再按功能另建启动目录。
+本地启动目录统一为 `build/notes-dpi-fixed/`，后续构建直接更新其中的 `DesktopTidy.exe`，不再按功能另建启动目录。
 构建生成主程序与开发诊断工具，不会自动运行项目单元测试。
-打包只纳入主程序、运行时配置和说明；ZIP 与 SHA-256 校验文件输出到 `dist/`。
+打包只纳入主程序、运行时配置和说明；ZIP 与 SHA-256 校验文件输出到 `dist/`；当前唯一便携包为 `DesktopTidy-latest-win-x64.zip`。
 
 | 目录 | 内容 |
 |---|---|
@@ -129,5 +143,19 @@ python scripts/package-release.py
 
 - Release x64 严格编译通过。
 - 退出恢复的16项隔离原生诊断通过，涵盖初始显隐、收起、退出、窗口重建 / 临时缺失、父进程强制结束。
-- 隔离验证不代表所有真实桌面兼容性通过；未运行项目单元测试。
+- 便签功能：49 项存储 / 边缘策略检查、两套隔离浏览器检查及 28 项真实 WebView2 检查（桌面启动模式 29 项）通过，覆盖 CRUD、持久化、同步冲突、编辑保护、左侧展开收起、主工作区与抽屉双向同步、主题与紧凑布局、混合 DPI 启动、窗口句柄重建、网页 HWND 停泊后的自动恢复与真实窗口截图。
+- 126 项应用分类回归检查通过；未运行已有项目全量测试，原生剪贴板调用与混合 DPI 多屏仍需人工端到端验收。
 - 仓库默认私有：下载者需仓库访问权限，或由所有者直接分享发布 ZIP。
+
+### 便签功能自测
+
+```bash
+build/notes-dpi-fixed/NotesChecks.exe
+build/notes-dpi-fixed/NotesEdgeNativeChecks.exe
+build/notes-dpi-fixed/NotesEdgeNativeChecks.exe --desktop-startup
+python tools/notes-ui-checks.py
+python tools/notes-edge-ui-checks.py
+```
+
+便签核心检查使用临时目录，覆盖增改删、完成状态、重启读取、长度/数量限制与损坏文件保护。
+浏览器检查需本地 Python Playwright 与 Chromium，使用模拟桥接；原生检查需 WebView2 Runtime，会短暂显示独立测试面板。`--desktop-startup` 会把测试自己的工作区窗口挂到桌面，覆盖真实启动链路；退出后移除测试窗口。两者均不修改真实便签或桌面分类。

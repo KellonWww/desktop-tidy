@@ -19,6 +19,7 @@ namespace DesktopTidy
         private readonly Font sharedFont = new Font("Microsoft YaHei UI", 11F);
         private readonly Font menuFont = new Font("Microsoft YaHei UI", 9F);
         private WorkspaceController workspace;
+        private readonly NotesEdgeController edgeNotes;
         private bool scanning, exitRequested, disposed;
         private DesktopReadResult pending, lastResult;
         private readonly object resultLock = new object();
@@ -29,6 +30,11 @@ namespace DesktopTidy
             menu = new WorkspaceMenu { Font = menuFont };
             menu.Items.Add("显示分类窗口", null, delegate { ShowWorkspace(); });
             menu.Items.Add("刷新桌面图标", null, delegate { Scan(); });
+            menu.Items.Add("打开边缘便签", null, delegate { if (edgeNotes != null) edgeNotes.ShowFromTray(); });
+            var edgeToggle = new ToolStripMenuItem("鼠标贴边呼出便签");
+            edgeToggle.Click += delegate { if (edgeNotes != null) edgeNotes.Toggle(); };
+            menu.Items.Add(edgeToggle);
+            menu.Opening += delegate { edgeToggle.Checked = edgeNotes != null && edgeNotes.Enabled; };
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("隐藏工作区", null, delegate { if (workspace != null) workspace.RequestHide(); });
             var toggleGroups = menu.Items.Add("折叠全部分类框", null, delegate { if (workspace != null) workspace.ToggleGroupsCollapsed(); });
@@ -42,6 +48,7 @@ namespace DesktopTidy
             menu.Items.Add("退出", null, delegate { RequestExit(); });
             tray = new NotifyIcon { Icon = AppBrand.Icon, Text = "桌面整理 · 分类工作区", ContextMenuStrip = menu, Visible = true };
             tray.DoubleClick += delegate { ShowWorkspace(); };
+            edgeNotes = new NotesEdgeController(GetWorkspace(), Notify);
             if (!keepTray) { startupWorkspace = true; Scan(); }
             if (GetWorkspace().HideIconsOnStartup && !scanning) { startupWorkspace = true; Scan(); }
         }
@@ -96,7 +103,7 @@ namespace DesktopTidy
             }
             else if (message == NativeMethods.IconsMessage) { if (workspace != null) workspace.InvalidateIcons(); }
             else if (message == NativeMethods.SettingChange || message == NativeMethods.ThemeChanged)
-            { if (workspace != null) workspace.RefreshTheme(); }
+            { if (workspace != null) workspace.RefreshTheme(); if (edgeNotes != null) edgeNotes.RefreshTheme(); }
         }
         private void Scan()
         {
@@ -114,6 +121,7 @@ namespace DesktopTidy
             if (exitRequested) return; exitRequested = true; tray.Visible = false;
             try
             {
+                if (edgeNotes != null) edgeNotes.Dispose();
                 if (workspace != null) { workspace.DisposeForExit(); workspace = null; }
             }
             finally { if (!scanning) ExitThread(); }
@@ -123,6 +131,7 @@ namespace DesktopTidy
             if (disposing && !disposed)
             {
                 lock (resultLock) { disposed = true; }
+                if (edgeNotes != null) edgeNotes.Dispose();
                 if (workspace != null) { workspace.Dispose(); workspace = null; }
                 tray.Visible = false; tray.Dispose(); menu.Dispose(); messages.Dispose(); sharedFont.Dispose(); menuFont.Dispose(); pending = lastResult = null;
             }

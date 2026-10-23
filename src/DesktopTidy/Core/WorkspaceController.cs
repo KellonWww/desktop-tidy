@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -10,6 +10,11 @@ namespace DesktopTidy.Core
 {
     internal sealed class WorkspaceController : IDisposable
     {
+        private NotesStore notes;
+        internal NotesStore Notes { get { return notes ?? (notes = new NotesStore()); } set { notes = value; } }
+        internal string WebProfileDirectory { get; set; }
+        internal bool EdgeNotesEnabled { get; set; }
+        internal Action ToggleEdgeNotes;
         private readonly LayoutStore store;
         private readonly Font font;
         private readonly Action<string> notify;

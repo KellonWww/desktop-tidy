@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using DesktopTidy.Core;
@@ -15,9 +16,18 @@ namespace DesktopTidy.UI
     // Only opaque item identities cross the bridge, never arbitrary shell commands.
     internal sealed class WebWorkspace : Panel
     {
+        [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr window);
+        [DllImport("user32.dll")] private static extern IntPtr GetWindowDpiAwarenessContext(IntPtr window);
+        [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+        [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetParent(IntPtr window, IntPtr parent);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
         private const string Origin = "https://workspace.desktop-tidy.invalid";
+        private readonly NotesStore notes;
         private readonly WorkspaceController owner;
         private readonly WorkspaceForm host;
+        private readonly NotesEdgeForm edgeHost;
+        private readonly Form surface;
         private readonly WebView2 browser;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 };
         private readonly Timer updates = new Timer { Interval = 700 };
@@ -30,12 +40,57 @@ namespace DesktopTidy.UI
         private int pendingCommands;
         internal bool Ready { get { return ready && !stopped; } }
         internal WebWorkspace(WorkspaceController owner, WorkspaceForm host)
+            : this(owner, host, null) { }
+        internal WebWorkspace(WorkspaceController owner, NotesEdgeForm host)
+            : this(owner, null, host) { }
+        private WebWorkspace(WorkspaceController owner, WorkspaceForm host, NotesEdgeForm edgeHost)
         {
-            this.owner = owner; this.host = host; Dock = DockStyle.Fill; Visible = true;
+            this.owner = owner; this.host = host; this.edgeHost = edgeHost;
+            surface = (Form)host ?? edgeHost; notes = owner.Notes;
+            if (edgeHost != null) feedback = "贴边呼出 · 移开收起 · 编辑时保持展开";
+            Dock = DockStyle.Fill; Visible = true;
             browser = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Theme.Read().Background };
             Controls.Add(browser);
-            updates.Tick += delegate { Publish(); };
+            notes.Changed += NotesChanged;
+            updates.Tick += delegate { RestoreBrowserSurface(); Publish(); };
             deadline.Tick += delegate { Fail("网页工作区加载超时，已恢复原生界面。"); };
+        }
+        internal void PrepareBrowserSurface()
+        {
+            // A hidden host is not automatically created with its WebView. Create the
+            // entire parent chain before async initialization can run in another HWND's
+            // DPI context; otherwise WinForms parks a differently-aware browser HWND.
+            IntPtr root = surface.Handle;
+            IntPtr parent = Handle;
+            IntPtr child = browser.Handle;
+            if (GetParent(parent) != root || GetParent(child) != parent)
+                Debug.WriteLine("Edge notes: browser HWND was not created in its host.");
+        }
+        internal void RestoreBrowserSurface()
+        {
+            // WinForms can park the native WebView HWND while rebuilding its host.
+            // Logical Visible/Parent stay unchanged, so setting Visible alone cannot recover it.
+            if (edgeHost == null || !Ready || !Visible || !IsHandleCreated ||
+                browser.IsDisposed || !browser.IsHandleCreated) return;
+            IntPtr child = browser.Handle, parent = Handle;
+            bool parked = GetParent(child) != parent;
+            int attachError = 0;
+            if (parked) { SetParent(child, parent); attachError = Marshal.GetLastWin32Error(); }
+            if (GetParent(child) != parent)
+            { Fail("便签网页挂载失败（Windows 错误 " + attachError + "），请从托盘重新打开便签。"); return; }
+            if (parked || !IsWindowVisible(child))
+            {
+                browser.Visible = true;
+                if (!SetWindowPos(child, IntPtr.Zero, browser.Left, browser.Top,
+                    browser.Width, browser.Height, 0x10 | 0x20 | 0x40))
+                    Fail("便签网页显示失败，请从托盘重新打开便签。");
+            }
+        }
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (edgeHost != null) BeginInvoke((Action)delegate
+            { if (!IsDisposed && !Disposing) RestoreBrowserSurface(); });
         }
         internal async void Initialize()
         {
@@ -45,10 +100,21 @@ namespace DesktopTidy.UI
                 string folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Web");
                 if (!File.Exists(Path.Combine(folder, "index.html"))) { Fail("网页资源缺失，已恢复原生界面。"); return; }
                 deadline.Start();
-                string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DesktopTidy", "WebView2");
+                string profile = owner.WebProfileDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DesktopTidy", "WebView2");
+                // Independent native hosts can have different DPI awareness. A separate
+                // renderer profile avoids shared-process initialization failures in either
+                // opening order; notes still come from the same owner.Notes store.
+                if (edgeHost != null) profile = Path.Combine(profile, "NotesEdge");
                 var environment = await CoreWebView2Environment.CreateAsync(null, profile);
                 if (stopped || IsDisposed) return;
-                await browser.EnsureCoreWebView2Async(environment);
+                // Explorer callbacks can run in a different DPI context from this tool
+                // window. Controller creation must use its actual parent HWND context.
+                System.Threading.Tasks.Task initialization;
+                IntPtr previousDpi = edgeHost == null ? IntPtr.Zero :
+                    SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(browser.Handle));
+                try { initialization = browser.EnsureCoreWebView2Async(environment); }
+                finally { if (previousDpi != IntPtr.Zero) SetThreadDpiAwarenessContext(previousDpi); }
+                await initialization;
                 if (stopped || IsDisposed) return;
                 var core = browser.CoreWebView2;
                 core.Settings.AreDevToolsEnabled = false;
@@ -67,10 +133,10 @@ namespace DesktopTidy.UI
                 core.NavigationCompleted += delegate(object sender, CoreWebView2NavigationCompletedEventArgs e)
                 { if (!e.IsSuccess) Fail("网页工作区加载失败，已恢复原生界面。"); };
                 core.WebMessageReceived += Receive;
-                core.Navigate(Origin + "/index.html");
+                core.Navigate(Origin + "/index.html" + (edgeHost == null ? "" : "?notesEdge=1"));
             }
             catch (Exception error)
-            { Debug.WriteLine(error); Fail("WebView2 不可用，已恢复原生界面。"); }
+            { Debug.WriteLine(error); Fail("WebView2 不可用：" + error.Message + "，已恢复原生界面。"); }
         }
         private static bool IsTrusted(string value)
         {
@@ -81,9 +147,10 @@ namespace DesktopTidy.UI
         {
             if (stopped || IsDisposed || Disposing) return;
             stopped = true; ready = false;
+            if (edgeHost != null) message = message.Replace("已恢复原生界面。", "请从托盘重新打开便签重试。");
             try { updates.Stop(); deadline.Stop(); Visible = false; }
             catch (Exception error) { Debug.WriteLine(error); }
-            try { host.WebFailed(message); }
+            try { if (edgeHost != null) edgeHost.WebFailed(message); else host.WebFailed(message); }
             catch (Exception error) { Debug.WriteLine(error); }
             try { if (!browser.IsDisposed) browser.Dispose(); }
             catch (Exception error) { Debug.WriteLine(error); }
@@ -113,14 +180,25 @@ namespace DesktopTidy.UI
             }
             iconData[item.Identity] = value; return value;
         }
+        private void NotesChanged() { PublishNotes(false); }
+        internal void PublishNotes(bool opened)
+        {
+            if (!Ready || IsDisposed || !surface.Visible || browser.CoreWebView2 == null) return;
+            try
+            {
+                browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new {
+                    type = opened ? "notesOpened" : "notesState", notes = notes.Notes, notesError = notes.LoadError }));
+            }
+            catch (Exception error) { Debug.WriteLine(error); }
+        }
         internal void Publish()
         {
-            if (!Ready || IsDisposed || executing || !host.Visible || browser.CoreWebView2 == null) return;
+            if (!Ready || IsDisposed || executing || !surface.Visible || browser.CoreWebView2 == null) return;
             if (SystemInformation.HighContrast) { Fail("系统高对比模式已恢复原生界面。"); return; }
             try
             {
                 var groups = new List<object>();
-                foreach (var group in owner.WebGroups)
+                foreach (var group in edgeHost == null ? owner.WebGroups : new List<GroupState>())
                 {
                     var members = new List<object>();
                     foreach (var item in owner.WebItems)
@@ -133,7 +211,7 @@ namespace DesktopTidy.UI
                     refreshing = owner.IsRefreshing, hideEmpty = owner.HideEmptyGroups, allCollapsed = owner.AllGroupsCollapsed,
                     nextDescending = owner.NextSortDescending, desktopVisible = owner.DesktopIconsVisible, opacity = owner.OpacityPercent,
                     hideOnStartup = owner.HideIconsOnStartup, dark = theme.Dark, followsSystemTheme = theme.FollowsSystem, highContrast = theme.HighContrast,
-                    updated = owner.LastRefreshDescription, feedback = feedback });
+                    notes = notes.Notes, notesError = notes.LoadError, edgeNotesEnabled = owner.EdgeNotesEnabled, updated = owner.LastRefreshDescription, feedback = feedback });
                 if (payload == previous) return;
                 browser.CoreWebView2.PostWebMessageAsJson(payload); previous = payload;
             }
@@ -153,7 +231,7 @@ namespace DesktopTidy.UI
             try
             {
                 string raw = e.WebMessageAsJson;
-                if (raw.Length > 8192) return;
+                if (raw.Length > 32768) return;
                 var data = json.Deserialize<Dictionary<string, object>>(raw);
                 if (data == null) return;
                 string command = ReadText(data, "command");
@@ -161,7 +239,7 @@ namespace DesktopTidy.UI
                 {
                     if (ready) return;
                     ready = true; deadline.Stop(); Visible = true; BringToFront();
-                    host.WebReady(); updates.Start(); Publish(); return;
+                    if (edgeHost != null) edgeHost.WebReady(); else host.WebReady(); updates.Start(); Publish(); PublishNotes(edgeHost != null); return;
                 }
                 if (!Ready || executing || pendingCommands >= 64) return;
                 pendingCommands++;
@@ -173,16 +251,52 @@ namespace DesktopTidy.UI
                     executing = true;
                     try { Dispatch(command, data); }
                     catch (Exception error)
-                    { Debug.WriteLine(error); if (!IsDisposed) host.SetFeedback("操作未完成，请重试或切回原生界面。"); }
+                    {
+                        Debug.WriteLine(error);
+                        if (!IsDisposed)
+                        {
+                            Feedback("操作未完成，请重试。");
+                            if (!string.IsNullOrEmpty(ReadText(data, "request")) && browser.CoreWebView2 != null)
+                                browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "notesResult", request = ReadText(data, "request"), success = false, error = "操作未完成，请重试。", notes = notes.Notes }));
+                        }
+                    }
                     finally { executing = false; }
                     Publish();
                 });
             }
             catch (Exception error)
-            { Debug.WriteLine(error); if (!IsDisposed) { executing = false; host.SetFeedback("操作未完成，请重试或切回原生界面。"); } }
+            { Debug.WriteLine(error); if (!IsDisposed) { executing = false; Feedback("操作未完成，请重试。"); } }
         }
         private void Dispatch(string command, Dictionary<string, object> data)
         {
+            if (command == "saveNote" || command == "deleteNote" || command == "toggleTodo" || command == "copyNote")
+            {
+                string error = null;
+                bool success;
+                if (command == "copyNote")
+                {
+                    var note = notes.Find(ReadText(data, "id"));
+                    success = note != null;
+                    if (success)
+                    {
+                        try { Clipboard.SetText(string.IsNullOrEmpty(note.Text) ? note.Title : note.Text); }
+                        catch (System.Runtime.InteropServices.ExternalException) { success = false; error = "剪贴板正忙，请重试。"; }
+                    }
+                    else error = "便签不存在，请刷新后重试。";
+                }
+                else success = notes.Change(command, ReadText(data, "id"), ReadText(data, "title"), ReadText(data, "text"), ReadText(data, "todo") == "true", ReadText(data, "revision"), out error);
+                browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "notesResult", request = ReadText(data, "request"), success = success, error = error, notes = notes.Notes }));
+                return;
+            }
+            if (edgeHost != null)
+            {
+                if (command == "hide") edgeHost.Collapse();
+                else if (command == "notesMotion") edgeHost.ReduceMotion = ReadText(data, "value") == "true" || !SystemInformation.IsMenuAnimationEnabled;
+                else if (command == "notesInteraction") edgeHost.InteractionActive = ReadText(data, "value") == "true";
+                else if (command == "setTheme") owner.SetThemeOverride(ReadText(data, "value") == "true");
+                return;
+            }
+            if (command == "toggleEdgeNotes") { if (owner.ToggleEdgeNotes != null) owner.ToggleEdgeNotes(); return; }
             if (command == "search") { owner.SetSearch(ReadText(data, "value")); return; }
             if (command == "refresh") { owner.RequestRefresh(); return; }
             if (command == "sort") { owner.ToggleCountSort(); return; }
@@ -238,7 +352,7 @@ namespace DesktopTidy.UI
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { stopped = true; updates.Dispose(); deadline.Dispose(); iconData.Clear(); itemTokens.Clear(); tokenItems.Clear(); }
+            if (disposing) { notes.Changed -= NotesChanged; stopped = true; updates.Dispose(); deadline.Dispose(); iconData.Clear(); itemTokens.Clear(); tokenItems.Clear(); }
             base.Dispose(disposing);
         }
     }

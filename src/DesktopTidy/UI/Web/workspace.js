@@ -655,11 +655,15 @@
       "input,textarea,[contenteditable=true]",
     );
     if (event.ctrlKey && event.key.toLowerCase() === "f") {
+      if (document.body.classList.contains("edge-notes")) { event.preventDefault(); return; }
       event.preventDefault();
       $("search").focus();
       $("search").select();
     }
-    if (event.ctrlKey && event.key.toLowerCase() === "z" && !editing) {
+    if (
+      event.ctrlKey && event.key.toLowerCase() === "z" && !editing &&
+      !document.body.classList.contains("show-notes")
+    ) {
       event.preventDefault();
       send("undo");
     }
@@ -697,5 +701,6 @@
       $("search").select();
     }
   });
-  send("ready");
+  // All deferred feature scripts must subscribe before the native host publishes state.
+  window.addEventListener("DOMContentLoaded", () => send("ready"), { once: true });
 })();

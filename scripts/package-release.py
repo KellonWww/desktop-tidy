@@ -8,8 +8,8 @@ import zipfile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--build-dir', type=Path, default=Path('build/prototype'))
-    parser.add_argument('--version', default='v0.3.0-preview')
+    parser.add_argument('--build-dir', type=Path, default=Path('build/notes-dpi-fixed'))
+    parser.add_argument('--version', default='latest')
     parser.add_argument('--output-dir', type=Path, default=Path('dist'))
     args = parser.parse_args()
     if not args.version or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_' for c in args.version):
@@ -19,7 +19,7 @@ def main():
     output = args.output_dir if args.output_dir.is_absolute() else root / args.output_dir
     files = [build / name for name in ['DesktopTidy.exe', 'DesktopTidy.exe.config', 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll', 'WebView2-LICENSE.txt']]
     web = build / 'Web'
-    for name in ['index.html', 'workspace.css', 'workspace.js', 'vendor/gsap.min.js', 'vendor/ScrollTrigger.min.js', 'vendor/Geist.woff2']:
+    for name in ['index.html', 'workspace.css', 'workspace.js', 'notes.js', 'vendor/gsap.min.js', 'vendor/ScrollTrigger.min.js', 'vendor/Geist.woff2']:
         if not (web / name).is_file():
             parser.error('missing offline workspace asset: ' + str(web / name))
     files.extend(path for path in web.rglob('*') if path.is_file())

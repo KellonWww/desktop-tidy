@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
@@ -9,10 +9,11 @@
     />
     <title>桌面整理 · 工作区</title>
     <link rel="icon" href="tidy.svg" />
-    <link rel="stylesheet" href="workspace.css" />
+    <link rel="stylesheet" href="workspace.css?v=left-notes-2" />
     <script defer src="vendor/gsap.min.js"></script>
     <script defer src="vendor/ScrollTrigger.min.js"></script>
-    <script defer src="workspace.js"></script>
+    <script defer src="workspace.js?v=left-notes-2"></script>
+    <script defer src="notes.js?v=left-notes-2"></script>
   </head>
   <body>
     <div class="app">
@@ -47,6 +48,7 @@
               <rect x="14" y="14" width="7" height="7" rx="1" /></svg
             >全部图标<span id="total">0</span>
           </button>
+          <button class="nav-item" id="notes-nav" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v13l-5 5H5Z"/><path d="M14 21v-5h5M8 8h8M8 12h5"/></svg>便签<span id="notes-count">0</span></button>
         </nav>
         <div class="nav-label">分类<span>拖动图标归类</span></div>
         <nav id="categories" aria-label="跳转分类"></nav>
@@ -88,6 +90,13 @@
           </div>
         </header>
         <div id="scroll" tabindex="-1">
+          <section id="notes-view" hidden aria-labelledby="notes-heading">
+            <div class="overview"><div><p class="eyebrow">随手记下，留给专注的自己</p><h1 id="notes-heading">我的便签<span>.</span></h1><p id="notes-summary">常用文本与待办，都放在这里。</p></div><div class="notes-heading-actions"><button id="edge-notes-toggle" aria-pressed="true" title="开启或关闭屏幕左侧悬停呼出">贴边呼出 · 开</button><button class="primary" id="new-note">＋ 新建便签</button></div></div>
+            <div class="notes-toolbar"><div class="notes-filters" role="group" aria-label="筛选便签"><button data-note-filter="all" aria-pressed="true">全部</button><button data-note-filter="text" aria-pressed="false">文本</button><button data-note-filter="pending" aria-pressed="false">待完成</button><button data-note-filter="done" aria-pressed="false">已完成</button></div><span>仅保存在本机</span></div>
+            <p id="notes-status" role="status" aria-live="polite"></p>
+            <div id="notes-grid"></div>
+            <div id="notes-empty" class="notes-empty"><h2>留住一个想法，或安排一件小事。</h2><p>新建文本便签，或把它设为 TODO。</p><button id="notes-empty-create">＋ 写下第一条</button></div>
+          </section>
           <section class="overview">
             <div>
               <p class="eyebrow">少一点杂乱，多一点专注</p>
@@ -166,6 +175,17 @@
         收起或退出时恢复原生桌面状态。<br />删除分类不会删除文件，可撤销。
       </p>
     </dialog>
+    <dialog id="note-editor" aria-labelledby="note-editor-title">
+      <form id="note-form">
+        <div class="dialog-header"><h2 id="note-editor-title">新建便签</h2><button type="button" id="note-close" aria-label="关闭便签编辑">×</button></div>
+        <p class="dialog-caption">记一点常用的，做一点重要的。</p>
+        <label class="note-label" for="note-title">标题 <span>选填 · 最多 80 字</span></label><input id="note-title" maxlength="80" placeholder="给这条便签起个名字" />
+        <label class="note-label" for="note-text">内容 <span id="note-length">0 / 2000</span></label><textarea id="note-text" maxlength="2000" rows="7" placeholder="常用文本、灵感，或者下一件要做的事…"></textarea>
+        <label class="note-todo-option"><input type="checkbox" id="note-todo" />设为 TODO，可勾选完成</label>
+        <p id="note-error" role="alert"></p><div class="note-form-actions"><button type="button" id="note-cancel">取消</button><button type="submit" class="primary" id="note-save">保存便签</button></div>
+      </form>
+    </dialog>
+    <dialog id="note-delete-dialog" aria-labelledby="note-delete-title"><div class="dialog-header"><h2 id="note-delete-title">删除这条便签？</h2></div><p class="dialog-caption">删除后无法撤销，请确认不再需要。</p><div class="note-form-actions"><button id="note-delete-cancel">保留便签</button><button id="note-delete-confirm" class="primary">确认删除</button></div></dialog>
     <dialog id="assign-dialog" aria-labelledby="assign-title">
       <div class="dialog-header">
         <h2 id="assign-title">移动到分类</h2>
