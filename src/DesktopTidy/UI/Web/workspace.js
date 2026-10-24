@@ -277,7 +277,7 @@
     menu.append(
       action("重命名分类", "rename", { category: String(group.id) }),
       action("删除分类", "delete", { category: String(group.id) }, "danger"),
-      element("p", "", "只删分类，不删原文件"),
+
     );
     details.append(summary, menu);
     actions.append(collapse, details);
@@ -289,7 +289,7 @@
     resize.title = "拖动调整分类框大小，松手后自动对齐";
     resize.setAttribute("aria-label", "调整分类框大小");
     resize.addEventListener("pointerdown", (event) => beginCardResize(event, card));
-    footer.append(element("span"), element("span", "", "拖入归类"), resize);
+    footer.append(element("span"), element("span"), resize);
     card.append(header, contents, footer);
     dropTarget(card, group.id);
     card._parts = {
@@ -320,7 +320,7 @@
         return a.name.localeCompare(b.name, "zh-CN");
       });
     part.title.textContent = group.title;
-    part.count.textContent = String(source.length).padStart(2, "0");
+    part.count.textContent = String(source.length);
     const shouldCollapse = group.collapsed && !query;
     card._group = group;
     card.classList.toggle("collapsed", shouldCollapse);
@@ -378,7 +378,7 @@
     }
     if (!source.length)
       part.contents.append(
-        element("p", "empty-card", "把图标拖到这里，开始整理。"),
+        element("p", "empty-card", "暂无图标"),
       );
   }
   function render(next) {
@@ -391,8 +391,7 @@
     }
     $("total").textContent = state.total;
     $("heading").replaceChildren(
-      document.createTextNode(query ? "搜索结果" : "我的桌面"),
-      element("span", "", "."),
+      document.createTextNode(query ? "搜索结果" : "桌面"),
     );
     $("view-name").textContent = query ? "搜索结果" : "全部图标";
     const matches = state.groups.reduce(
@@ -404,8 +403,8 @@
       0,
     );
     $("summary").textContent = query
-      ? `${matches} / ${state.total} 个图标匹配 · 搜索不会改变分类`
-      : `${state.groups.length} 个分类，${state.total} 个图标。每样东西，都有自己的位置。`;
+      ? `${matches} 个匹配，共 ${state.total} 个图标`
+      : `${state.groups.length} 个分类，${state.total} 个图标`;
     $("updated").textContent = state.updated;
     $("sort").textContent = state.nextDescending ? "数量 ↓" : "数量 ↑";
     $("sort").title = "按全部图标数量排序；一次性操作，可撤销";
@@ -413,7 +412,7 @@
     $("refresh").disabled = state.refreshing;
     $("refresh").lastElementChild.textContent = state.refreshing
       ? "正在刷新…"
-      : "刷新桌面";
+      : "刷新";
     $("hide-empty").checked = state.hideEmpty;
     $("startup").checked = state.hideOnStartup;
     $("dark-theme").checked = state.dark;
@@ -425,17 +424,18 @@
     $("theme-toggle").setAttribute("aria-label", $("theme-toggle").title);
     $("system-theme").disabled = state.highContrast || state.followsSystemTheme;
     $("theme-note").textContent = state.highContrast
-      ? "系统高对比度已启用，主题由 Windows 接管。"
+      ? "由系统高对比度模式管理"
       : state.followsSystemTheme
-        ? "当前跟随 Windows 应用模式；切换后会记住你的选择。"
-        : "当前为手动主题；可随时恢复跟随 Windows。";
+        ? "跟随系统"
+        : "自定义主题";
     if (document.activeElement !== $("opacity"))
       $("opacity").value = state.opacity;
     $("opacity-value").textContent = `${$("opacity").value}%`;
     $("desktop").textContent =
       state.desktopVisible === true ? "隐藏原生桌面图标" : "显示原生桌面图标";
-    if ($("feedback").textContent !== state.feedback) {
-      $("feedback").textContent = state.feedback;
+    const feedback = state.feedback === "本地工作区" ? "" : (state.feedback || "");
+    if ($("feedback").textContent !== feedback) {
+      $("feedback").textContent = feedback;
       if (animate())
         gsap.fromTo(
           $("feedback"),
@@ -655,10 +655,10 @@
       "input,textarea,[contenteditable=true]",
     );
     if (event.ctrlKey && event.key.toLowerCase() === "f") {
-      if (document.body.classList.contains("edge-notes")) { event.preventDefault(); return; }
       event.preventDefault();
-      $("search").focus();
-      $("search").select();
+      if (document.querySelector("dialog[open]")) return;
+      const target = document.body.classList.contains("show-notes") ? $("notes-search") : $("search");
+      target.focus(); target.select();
     }
     if (
       event.ctrlKey && event.key.toLowerCase() === "z" && !editing &&
@@ -697,8 +697,9 @@
   bridge?.addEventListener("message", (event) => {
     if (event.data?.type === "state") render(event.data);
     if (event.data?.type === "focusSearch") {
-      $("search").focus();
-      $("search").select();
+      if (document.querySelector("dialog[open]")) return;
+      const target = document.body.classList.contains("show-notes") ? $("notes-search") : $("search");
+      target.focus(); target.select();
     }
   });
   // All deferred feature scripts must subscribe before the native host publishes state.

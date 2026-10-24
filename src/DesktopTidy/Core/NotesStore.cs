@@ -15,6 +15,7 @@ namespace DesktopTidy.Core
         [DataMember] public string Text { get; set; }
         [DataMember] public bool IsTodo { get; set; }
         [DataMember] public bool Completed { get; set; }
+        [DataMember] public bool IsPinned { get; set; }
         [DataMember] public string Updated { get; set; }
     }
 
@@ -77,7 +78,7 @@ namespace DesktopTidy.Core
             if (error != null) return false;
             var next = new List<WorkspaceNote>(notes);
             var existing = Find(id);
-            if (command != "saveNote" && command != "deleteNote" && command != "toggleTodo")
+            if (command != "saveNote" && command != "deleteNote" && command != "toggleTodo" && command != "togglePin")
             { error = "不支持的便签操作"; return false; }
             if ((id.Length > 0 || command != "saveNote") && existing == null)
             { error = "便签不存在，请刷新后重试"; return false; }
@@ -87,9 +88,15 @@ namespace DesktopTidy.Core
             else
             {
                 if (command == "toggleTodo" && !existing.IsTodo) { error = "文本便签不能标记完成"; return false; }
-                var changed = command == "toggleTodo"
-                    ? new WorkspaceNote { Id = id, Title = existing.Title, Text = existing.Text, IsTodo = true, Completed = !existing.Completed }
-                    : new WorkspaceNote { Id = existing == null ? Guid.NewGuid().ToString("N") : id, Title = title.Trim(), Text = text.Trim(), IsTodo = todo, Completed = todo && existing != null && existing.Completed };
+                var changed = command == "toggleTodo" || command == "togglePin"
+                    ? new WorkspaceNote {
+                        Id = id, Title = existing.Title, Text = existing.Text, IsTodo = existing.IsTodo,
+                        Completed = command == "toggleTodo" ? !existing.Completed : existing.Completed,
+                        IsPinned = command == "togglePin" ? !existing.IsPinned : existing.IsPinned }
+                    : new WorkspaceNote {
+                        Id = existing == null ? Guid.NewGuid().ToString("N") : id, Title = title.Trim(), Text = text.Trim(),
+                        IsTodo = todo, IsPinned = existing != null && existing.IsPinned,
+                        Completed = todo && existing != null && existing.Completed };
                 // Revisions must keep advancing even within one clock tick or after a clock rollback.
                 DateTime updated = DateTime.UtcNow, previousUpdate;
                 if (existing != null && DateTime.TryParseExact(existing.Updated, "o", System.Globalization.CultureInfo.InvariantCulture,

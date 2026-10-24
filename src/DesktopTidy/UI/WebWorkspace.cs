@@ -211,7 +211,9 @@ namespace DesktopTidy.UI
                     refreshing = owner.IsRefreshing, hideEmpty = owner.HideEmptyGroups, allCollapsed = owner.AllGroupsCollapsed,
                     nextDescending = owner.NextSortDescending, desktopVisible = owner.DesktopIconsVisible, opacity = owner.OpacityPercent,
                     hideOnStartup = owner.HideIconsOnStartup, dark = theme.Dark, followsSystemTheme = theme.FollowsSystem, highContrast = theme.HighContrast,
-                    notes = notes.Notes, notesError = notes.LoadError, edgeNotesEnabled = owner.EdgeNotesEnabled, updated = owner.LastRefreshDescription, feedback = feedback });
+                    notes = notes.Notes, notesError = notes.LoadError, edgeNotesEnabled = owner.EdgeNotesEnabled, edgeNotesDelay = owner.EdgeNotesDelay,
+                    edgeNotesDockSide = owner.EdgeNotesDockSide, edgeNotesDockStatus = owner.EdgeNotesDockStatus, edgeNotesScreen = owner.EdgeNotesScreen, edgeNotesPaused = owner.EdgeNotesPaused,
+                    notesScreens = Array.ConvertAll(Screen.AllScreens, screen => new { id = screen.DeviceName, name = screen.DeviceName + (screen.Primary ? "（主屏）" : "") }), updated = owner.LastRefreshDescription, feedback = feedback });
                 if (payload == previous) return;
                 browser.CoreWebView2.PostWebMessageAsJson(payload); previous = payload;
             }
@@ -269,11 +271,22 @@ namespace DesktopTidy.UI
         }
         private void Dispatch(string command, Dictionary<string, object> data)
         {
-            if (command == "saveNote" || command == "deleteNote" || command == "toggleTodo" || command == "copyNote")
+            if (command == "saveNote" || command == "deleteNote" || command == "toggleTodo" || command == "togglePin" || command == "copyDraft" || command == "copyNote")
             {
                 string error = null;
                 bool success;
-                if (command == "copyNote")
+                if (command == "copyDraft")
+                {
+                    string text = ReadText(data, "text");
+                    success = text.Length > 0 && text.Length <= NotesStore.MaxText + 82;
+                    if (!success) error = "草稿为空或过长。";
+                    else
+                    {
+                        try { Clipboard.SetText(text); }
+                        catch (System.Runtime.InteropServices.ExternalException) { success = false; error = "剪贴板正忙，请重试。"; }
+                    }
+                }
+                else if (command == "copyNote")
                 {
                     var note = notes.Find(ReadText(data, "id"));
                     success = note != null;
@@ -290,12 +303,16 @@ namespace DesktopTidy.UI
             }
             if (edgeHost != null)
             {
-                if (command == "hide") edgeHost.Collapse();
+                if (command == "move") edgeHost.BeginDrag();
+                else if (command == "hide") edgeHost.Collapse();
                 else if (command == "notesMotion") edgeHost.ReduceMotion = ReadText(data, "value") == "true" || !SystemInformation.IsMenuAnimationEnabled;
                 else if (command == "notesInteraction") edgeHost.InteractionActive = ReadText(data, "value") == "true";
                 else if (command == "setTheme") owner.SetThemeOverride(ReadText(data, "value") == "true");
                 return;
             }
+            if (command == "configureEdgeNotes")
+            { if (owner.ConfigureEdgeNotes != null) owner.ConfigureEdgeNotes(ReadInt(data, "delay"), ReadText(data, "screen")); return; }
+            if (command == "pauseEdgeNotes") { if (owner.PauseEdgeNotes != null) owner.PauseEdgeNotes(); return; }
             if (command == "toggleEdgeNotes") { if (owner.ToggleEdgeNotes != null) owner.ToggleEdgeNotes(); return; }
             if (command == "search") { owner.SetSearch(ReadText(data, "value")); return; }
             if (command == "refresh") { owner.RequestRefresh(); return; }

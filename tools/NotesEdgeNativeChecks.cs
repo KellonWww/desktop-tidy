@@ -85,6 +85,66 @@ internal static class NotesEdgeNativeChecks
     }
     private static int Count(object store)
     { int count = 0; foreach (object item in (IEnumerable)Get(store, "Notes")) { if (item != null) count++; } return count; }
+    private static void CheckDocking(Assembly assembly, object owner, Type edge)
+    {
+        string key = @"Software\DesktopTidy-Tests\Dock-" + Guid.NewGuid().ToString("N");
+        object controller = null;
+        try
+        {
+            controller = Make(assembly.GetType("DesktopTidy.UI.NotesEdgeController", true), owner, (Action<string>)delegate(string message) { Console.WriteLine("DOCK " + message); }, key);
+            Call(controller, "ShowFromTray");
+            Form drawer = (Form)Get(controller, "panel"); Until(() => (bool)Get(drawer, "Ready"), "dock drawer initialization timeout");
+            Rectangle work = Screen.PrimaryScreen.WorkingArea;
+            foreach (string side in new[] { "Left", "Top", "Right", "Bottom" })
+            {
+                Point point = side == "Left" ? new Point(work.Left + 1, work.Top + work.Height / 2) :
+                    side == "Right" ? new Point(work.Right - 2, work.Top + work.Height / 2) :
+                    side == "Top" ? new Point(work.Left + work.Width / 2, work.Top + 1) : new Point(work.Left + work.Width / 2, work.Bottom - 2);
+                Point start = new Point(work.Left + work.Width / 2, work.Top + work.Height / 2);
+                Call(drawer, "StartDrag", start); Call(drawer, "ContinueDrag", point, true, false);
+                Check((bool)Get(drawer, "Dragging") && ((string)Get(owner, "EdgeNotesDockStatus")).Contains("松手吸附"), "native drag previews destination: " + side);
+                Call(drawer, "ContinueDrag", point, false, false);
+                Check(!(bool)Get(drawer, "Dragging") && (string)Get(owner, "EdgeNotesDockSide") == side, "native release docks to selected side: " + side);
+                Until(() => !(bool)Get(drawer, "animating"), "dock animation completion timeout");
+                Check(work.Contains(drawer.Bounds), "docked native drawer stays in work area: " + side);
+                Until(() => Script(drawer, "document.getElementById('note-dock-location').textContent").Contains("已吸附"), "dock status publication timeout");
+                using (var saved = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(key))
+                    Check(Convert.ToString(saved.GetValue("EdgeNotesDock")).StartsWith(side + "|"), "native dock persisted: " + side);
+                Call(drawer, "Collapse"); Until(() => !drawer.Visible, "dock collapse timeout");
+                Call(controller, "Tick", null, EventArgs.Empty);
+                Form handle = (Form)Get(controller, "dockHandle");
+                Check(handle != null && handle.Visible && work.Contains(handle.Bounds), "collapsed native handle visible: " + side);
+                Check(side == "Left" ? handle.Left == work.Left : side == "Right" ? handle.Right == work.Right : side == "Top" ? handle.Top == work.Top : handle.Bottom == work.Bottom,
+                    "native landmark marks correct screen edge: " + side);
+                ((Button)handle.Controls[0]).PerformClick();
+                Check(drawer.Visible && !handle.Visible, "handle click reopens docked drawer: " + side);
+            }
+            ((IDisposable)controller).Dispose(); controller = null;
+            controller = Make(assembly.GetType("DesktopTidy.UI.NotesEdgeController", true), owner, (Action<string>)delegate(string message) { Console.WriteLine("DOCK " + message); }, key);
+            Check((string)Get(owner, "EdgeNotesDockSide") == "Bottom", "dock direction restored after controller restart");
+            Call(controller, "ShowFromTray"); drawer = (Form)Get(controller, "panel");
+            Until(() => (bool)Get(drawer, "Ready"), "restored dock drawer initialization timeout");
+            Call(drawer, "StartDrag", new Point(work.Left + work.Width / 2, work.Top + work.Height / 2));
+            Call(drawer, "ContinueDrag", new Point(work.Left, work.Top + 100), true, false);
+            Call(drawer, "ContinueDrag", new Point(work.Left, work.Top + 100), false, true);
+            Check((string)Get(owner, "EdgeNotesDockSide") == "Bottom" && !((string)Get(owner, "EdgeNotesDockStatus")).Contains("松手"), "Escape cancels drag without changing saved dock");
+            Call(controller, "Pause"); Call(drawer, "Collapse"); Until(() => !drawer.Visible, "paused dock collapse timeout");
+            Call(controller, "Tick", null, EventArgs.Empty);
+            Form pausedHandle = (Form)Get(controller, "dockHandle");
+            Check(pausedHandle.Visible, "paused hover retains visible dock landmark");
+            ((Button)pausedHandle.Controls[0]).PerformClick(); Check(drawer.Visible, "paused dock still opens by click");
+            Call(controller, "Toggle"); Until(() => !drawer.Visible, "disabled dock collapse timeout");
+            Check(!pausedHandle.Visible, "disabling edge feature hides landmark");
+            Call(controller, "ShowFromTray"); Check(drawer.Visible, "disabled docking preserves manual tray opening");
+        }
+        finally
+        {
+            if (controller != null) ((IDisposable)controller).Dispose();
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(key, false);
+        }
+    }
+
+
     [STAThread] private static int Main(string[] args)
     {
         string folder = Path.Combine(Path.GetTempPath(), "DesktopTidy-EdgeChecks-" + Guid.NewGuid().ToString("N"));
@@ -197,6 +257,9 @@ internal static class NotesEdgeNativeChecks
                 Script(panel, "document.getElementById('note-title').value='native TODO'; document.getElementById('note-text').value='temporary test'; document.getElementById('note-todo').checked=true; document.getElementById('note-save').click()");
                 Until(() => Count(store) == 1 && !(bool)Get(panel, "InteractionActive"), "native save timeout");
                 Check(File.Exists(Path.Combine(folder, "notes.json")), "native bridge saves to injected temporary store");
+                Script(panel, "document.querySelector('[data-note-action=pin]').click()");
+                Until(() => Script(panel, "Boolean(document.querySelector('.note-card.pinned'))") == "true", "native pin timeout");
+                Check(true, "native pin saves through the bridge");
                 Script(panel, "document.querySelector('.note-check input').click()");
                 Until(() => Script(panel, "Boolean(document.querySelector('.note-card.completed'))") == "true", "native toggle timeout");
                 Check(true, "native TODO completion");
@@ -211,7 +274,7 @@ internal static class NotesEdgeNativeChecks
                 Until(() => Script(panel, "document.getElementById('note-error').textContent.includes('另一处更新')") == "true", "revision guard timeout");
                 Check(Script(panel, "document.getElementById('note-text').value") == "\"my draft\"", "native stale edit rejected while retaining draft");
                 Call(panel, "Collapse"); Until(() => !panel.Visible, "collapse animation timeout"); Check(!panel.Visible && second.Visible, "native collapse hides only edge window");
-                foreach (string side in new[] { "Left" })
+                foreach (string side in new[] { "Left", "Top", "Right", "Bottom" })
                 {
                     Call(panel, "Reveal", new Rectangle(100, 100, 560, 700), Enum.Parse(edge, side), false);
                     Check(panel.Visible && Script(panel, "document.getElementById('note-text').value") == "\"my draft\"", "native reveal preserves draft: " + side);
@@ -220,7 +283,11 @@ internal static class NotesEdgeNativeChecks
                 Check(((ICollection)Get(owner, "WebGroups")).Count == groups && !(bool)Get(owner, "Visible"), "classification groups and visibility untouched");
                 object fresh = Make(assembly.GetType("DesktopTidy.Core.NotesStore", true), Path.Combine(folder, "notes.json"));
                 Check(Count(fresh) == 1, "native saved notes survive store reload");
-                second.Dispose(); second = null; main = null; panel.Dispose(); panel = null; owner.Dispose(); owner = null;
+                foreach (object savedNote in (IEnumerable)Get(fresh, "Notes"))
+                    Check((bool)Get(savedNote, "IsPinned"), "pin survives editing, completion and store reload");
+                second.Dispose(); second = null; main = null; panel.Dispose(); panel = null;
+                CheckDocking(assembly, owner, edge);
+                owner.Dispose(); owner = null;
             }
             Console.WriteLine(checks + " native edge checks passed"); return 0;
         }

@@ -16,9 +16,9 @@ internal static class NotesChecks
     {
         var screen = new Rectangle(-1920, -200, 1920, 1080);
         Check(NotesEdgeGeometry.Detect(screen, new Point(-1920, 300)) == NotesEdge.Left, "negative monitor left edge");
-        Check(NotesEdgeGeometry.Detect(screen, new Point(-1, 300)) == NotesEdge.None, "ignored non-left monitor right edge");
-        Check(NotesEdgeGeometry.Detect(screen, new Point(-900, -200)) == NotesEdge.None, "ignored non-left monitor top edge");
-        Check(NotesEdgeGeometry.Detect(screen, new Point(-900, 879)) == NotesEdge.None, "ignored non-left monitor bottom edge");
+        Check(NotesEdgeGeometry.Detect(screen, new Point(-1, 300)) == NotesEdge.Right, "right edge detection");
+        Check(NotesEdgeGeometry.Detect(screen, new Point(-900, -200)) == NotesEdge.Top, "top edge detection");
+        Check(NotesEdgeGeometry.Detect(screen, new Point(-900, 879)) == NotesEdge.Bottom, "bottom edge detection");
         Check(NotesEdgeGeometry.Detect(screen, new Point(-1920, -200)) == NotesEdge.None, "corner guard protects system gestures");
         Check(NotesEdgeGeometry.Detect(screen, new Point(0, 300)) == NotesEdge.None, "outside monitor ignored");
         Check(NotesEdgeGeometry.Detect(screen, new Point(-1917, 300)) == NotesEdge.None, "only three pixel trigger band");
@@ -26,7 +26,19 @@ internal static class NotesChecks
         {
             var work = new Rectangle(-1920, -200, 1920, 1032);
             Check(work.Contains(NotesEdgeGeometry.PanelBounds(work, side, 1.5f)), "panel respects working area: " + side);
+            Rectangle panel = NotesEdgeGeometry.PanelBounds(work, side, 1f);
+            Rectangle handle = NotesEdgeGeometry.HandleBounds(work, side, 1.5f);
+            Check(work.Contains(handle), "dock handle remains in work area: " + side);
+            Point edgePoint = side == NotesEdge.Left ? new Point(work.Left, work.Top + work.Height / 2) :
+                side == NotesEdge.Right ? new Point(work.Right - 1, work.Top + work.Height / 2) :
+                side == NotesEdge.Top ? new Point(work.Left + work.Width / 2, work.Top) : new Point(work.Left + work.Width / 2, work.Bottom - 1);
+            Check(NotesEdgeGeometry.Nearest(work, edgePoint) == side, "drag chooses nearest edge: " + side);
+            Check(side == NotesEdge.Left ? panel.Left == work.Left + 12 : side == NotesEdge.Right ? panel.Right == work.Right - 12 :
+                side == NotesEdge.Top ? panel.Top == work.Top + 12 : panel.Bottom == work.Bottom - 12, "panel actually anchored to chosen side: " + side);
+            Check(side == NotesEdge.Left ? handle.Left == work.Left : side == NotesEdge.Right ? handle.Right == work.Right :
+                side == NotesEdge.Top ? handle.Top == work.Top : handle.Bottom == work.Bottom, "visible handle marks chosen side: " + side);
             var small = new Rectangle(0, 0, 320, 240);
+            Check(small.Contains(NotesEdgeGeometry.HandleBounds(small, side, 2f)), "handle fits small high-DPI screen: " + side);
             Check(small.Contains(NotesEdgeGeometry.PanelBounds(small, side, 2f)), "panel fits small high-DPI area: " + side);
         }
         var timing = new NotesEdgeTrigger();

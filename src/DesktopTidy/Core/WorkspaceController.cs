@@ -15,6 +15,14 @@ namespace DesktopTidy.Core
         internal string WebProfileDirectory { get; set; }
         internal bool EdgeNotesEnabled { get; set; }
         internal Action ToggleEdgeNotes;
+        internal int EdgeNotesDelay = 600;
+        internal string EdgeNotesScreen = "all";
+        internal bool EdgeNotesPaused;
+        internal string EdgeNotesDockSide = "Left";
+        internal string EdgeNotesDockScreen = "";
+        internal string EdgeNotesDockStatus = "已停靠左侧 · 拖动顶部可换边";
+        internal Action<int, string> ConfigureEdgeNotes;
+        internal Action PauseEdgeNotes;
         private readonly LayoutStore store;
         private readonly Font font;
         private readonly Action<string> notify;

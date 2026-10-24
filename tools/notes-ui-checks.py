@@ -1,5 +1,6 @@
 """Isolated browser checks: mocked native bridge; never touches real notes or desktop files."""
 import argparse
+import os
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
@@ -22,7 +23,9 @@ MOCK = r"""
       if (message.command === 'setTheme') { initial.dark = message.value === 'true'; emit(initial); return; }
       if (message.command === 'toggleEdgeNotes') { initial.edgeNotesEnabled = initial.edgeNotesEnabled === false; emit(initial); return; }
       if (message.command === 'search') { initial.search = message.value; emit(initial); return; }
-      if (!['saveNote', 'deleteNote', 'toggleTodo', 'copyNote'].includes(message.command)) return;
+      if (message.command === 'configureEdgeNotes') { initial.edgeNotesDelay = message.delay; initial.edgeNotesScreen = message.screen; emit(initial); return; }
+      if (message.command === 'pauseEdgeNotes') { initial.edgeNotesPaused = !initial.edgeNotesPaused; emit(initial); return; }
+      if (!['saveNote', 'deleteNote', 'toggleTodo', 'togglePin', 'copyDraft', 'copyNote'].includes(message.command)) return;
       const respond = () => {
         if (mock.rejectNext) { mock.rejectNext = false; emit({type:'notesResult', request:message.request, success:false, error:'模拟磁盘写入失败', notes:initial.notes}); return; }
         const found = initial.notes.find(note => note.Id === message.id);
@@ -31,10 +34,11 @@ MOCK = r"""
         }
         if (message.command === 'saveNote') {
           const note = { Id: found?.Id || crypto.randomUUID().replaceAll('-', ''), Title:message.title,
-            Text:message.text, IsTodo:message.todo === 'true', Completed:message.todo === 'true' && Boolean(found?.Completed), Updated:new Date().toISOString() };
+            Text:message.text, IsTodo:message.todo === 'true', IsPinned:Boolean(found?.IsPinned), Completed:message.todo === 'true' && Boolean(found?.Completed), Updated:new Date().toISOString() };
           if (found) initial.notes[initial.notes.indexOf(found)] = note; else initial.notes.push(note);
         }
         if (message.command === 'toggleTodo') { found.Completed = !found.Completed; found.Updated = new Date().toISOString(); }
+        if (message.command === 'togglePin') { found.IsPinned = !found.IsPinned; found.Updated = new Date().toISOString(); }
         if (message.command === 'deleteNote') initial.notes = initial.notes.filter(note => note.Id !== message.id);
         localStorage.setItem('test-notes', JSON.stringify(initial.notes));
         emit({type:'notesResult', request:message.request, success:true, notes:initial.notes}); emit(initial);
@@ -48,6 +52,7 @@ MOCK = r"""
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--screenshots', type=Path)
+    parser.add_argument("--build-dir", type=Path, default=ROOT / os.environ.get("BUILD_DIR", "build/notes-dpi-fixed"))
     args = parser.parse_args()
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -55,12 +60,15 @@ def main():
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.add_init_script(MOCK)
-        page.goto((ROOT / 'build/prototype/Web/index.html').as_uri())
+        page.goto((args.build_dir.resolve() / 'Web/index.html').as_uri())
         page.locator('#notes-nav').click()
+        page.locator('#notes-edge-settings summary').click()
         page.locator('#edge-notes-toggle').click()
         expect(page.locator('#edge-notes-toggle')).to_have_attribute('aria-pressed', 'false')
         page.locator('#edge-notes-toggle').click()
         expect(page.locator('#edge-notes-toggle')).to_have_attribute('aria-pressed', 'true')
+        page.keyboard.press('Escape')
+        expect(page.locator('#notes-edge-settings')).not_to_have_attribute('open', '')
         expect(page.locator('#notes-view')).to_be_visible()
         expect(page.locator('#grid')).to_be_hidden()
         expect(page.locator('#notes-empty')).to_be_visible()

@@ -1,5 +1,6 @@
-﻿"""Edge-only browser regression checks; isolated mock bridge, no real desktop writes."""
+"""Edge-only browser regression checks; isolated mock bridge, no real desktop writes."""
 import argparse
+import os
 import importlib.util
 import json
 import sys
@@ -15,6 +16,7 @@ spec.loader.exec_module(module)
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--screenshots", type=Path)
+    parser.add_argument("--build-dir", type=Path, default=ROOT / os.environ.get("BUILD_DIR", "build/notes-dpi-fixed"))
     args = parser.parse_args()
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -22,7 +24,7 @@ def main():
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.add_init_script(module.MOCK)
-        page.goto((ROOT / "build/prototype/Web/index.html").as_uri() + "?notesEdge=1")
+        page.goto((args.build_dir.resolve() / "Web/index.html").as_uri() + "?notesEdge=1")
         expect(page.locator("#notes-view")).to_be_visible()
         expect(page.locator(".sidebar")).to_be_hidden()
         expect(page.locator("#grid")).to_be_hidden()
@@ -88,6 +90,7 @@ def main():
             if args.screenshots:
                 args.screenshots.mkdir(parents=True, exist_ok=True)
                 page.screenshot(animations="disabled", path=str(args.screenshots / ("便签边缘-20261023-" + theme + ".png")))
+        page.locator("#notes-completed").click()
         for unused in range(2):
             page.get_by_role("button", name="删除便签", exact=True).first.click()
             page.locator("#note-delete-confirm").click()

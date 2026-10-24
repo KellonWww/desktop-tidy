@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -17,19 +17,19 @@ namespace DesktopTidy.UI
             return new Theme
             {
                 Dark = dark,
-                Background = dark ? Color.FromArgb(20, 33, 38) : Color.FromArgb(240, 236, 223),
-                Surface = dark ? Color.FromArgb(27, 43, 49) : Color.FromArgb(248, 245, 235),
-                Header = dark ? Color.FromArgb(37, 55, 62) : Color.FromArgb(228, 223, 208),
-                Stroke = dark ? Color.FromArgb(53, 73, 79) : Color.FromArgb(202, 196, 181),
-                Text = dark ? Color.FromArgb(237, 242, 232) : Color.FromArgb(41, 45, 40),
-                Muted = dark ? Color.FromArgb(176, 192, 195) : Color.FromArgb(91, 98, 89),
-                Accent = dark ? Color.FromArgb(213, 245, 120) : Color.FromArgb(40, 74, 179),
-                AccentText = dark ? Color.FromArgb(25, 37, 25) : Color.FromArgb(249, 250, 252),
-                Hover = dark ? Color.FromArgb(224, 250, 156) : Color.FromArgb(52, 91, 199),
-                Pressed = dark ? Color.FromArgb(190, 219, 104) : Color.FromArgb(32, 62, 153),
-                AccentSoft = dark ? Color.FromArgb(51, 67, 41) : Color.FromArgb(221, 226, 242),
-                AccentLine = dark ? Color.FromArgb(147, 178, 82) : Color.FromArgb(107, 129, 195),
-                StrongStroke = dark ? Color.FromArgb(97, 119, 125) : Color.FromArgb(148, 142, 126)
+                Background = dark ? Color.FromArgb(27, 29, 34) : Color.FromArgb(245, 246, 248),
+                Surface = dark ? Color.FromArgb(36, 39, 46) : Color.FromArgb(255, 255, 255),
+                Header = dark ? Color.FromArgb(48, 52, 61) : Color.FromArgb(238, 240, 244),
+                Stroke = dark ? Color.FromArgb(59, 65, 77) : Color.FromArgb(220, 224, 231),
+                Text = dark ? Color.FromArgb(231, 234, 240) : Color.FromArgb(37, 42, 52),
+                Muted = dark ? Color.FromArgb(162, 170, 184) : Color.FromArgb(101, 109, 123),
+                Accent = dark ? Color.FromArgb(155, 185, 255) : Color.FromArgb(54, 95, 211),
+                AccentText = dark ? Color.FromArgb(23, 43, 83) : Color.FromArgb(255, 255, 255),
+                Hover = dark ? Color.FromArgb(181, 203, 255) : Color.FromArgb(71, 112, 224),
+                Pressed = dark ? Color.FromArgb(135, 166, 237) : Color.FromArgb(41, 79, 191),
+                AccentSoft = dark ? Color.FromArgb(48, 62, 91) : Color.FromArgb(234, 240, 255),
+                AccentLine = dark ? Color.FromArgb(126, 155, 218) : Color.FromArgb(139, 163, 229),
+                StrongStroke = dark ? Color.FromArgb(104, 115, 132) : Color.FromArgb(146, 155, 170)
             };
         }
         internal static Theme Read()
