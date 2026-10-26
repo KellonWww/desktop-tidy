@@ -39,6 +39,42 @@
     if (text !== undefined) value.textContent = text;
     return value;
   }
+  // Plain-text tokens only: never interpret a note as HTML or change its stored value.
+  const syntaxTokens = /(`[^`\n]+`)|(https?:\/\/[^\s<>]+)|(\/\/[^\n]*|#[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(\*\*[^*\n]+\*\*)|\b(TODO|FIXME|NOTE|WARNING|SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AND|OR|NOT|NULL|INSERT|INTO|VALUES|UPDATE|SET|DELETE|ORDER|BY|GROUP|LIMIT|AS|DISTINCT|CREATE|TABLE|public|private|protected|class|interface|static|final|void|return|if|else|for|while|try|catch|throw|throws|new|const|let|var|function|async|await|import|export|true|false|null|undefined|def|in|is|None|True|False)\b|\b(\d+(?:\.\d+)?)\b/g;
+  function highlight(target, text) {
+    const fragment = document.createDocumentFragment();
+    let offset = 0;
+    for (const match of text.matchAll(syntaxTokens)) {
+      fragment.append(document.createTextNode(text.slice(offset, match.index)));
+      const kind = match[1] ? "code" : match[2] ? "link" : match[3] ? "comment" : match[4] ? "string" : match[5] ? "emphasis" : match[6] ? "keyword" : "number";
+      fragment.append(node("span", "note-syntax-" + kind, match[0]));
+      offset = match.index + match[0].length;
+    }
+    fragment.append(document.createTextNode(text.slice(offset)));
+    target.replaceChildren(fragment);
+  }
+  function syncEditorHighlight() {
+    const input = $("note-text"), backdrop = $("note-highlight");
+    highlight(backdrop, input.value + "\n");
+    backdrop.scrollTop = input.scrollTop;
+    backdrop.scrollLeft = input.scrollLeft;
+  }
+  function applyFontSize(size) {
+    if (!Number.isInteger(size) || size < 12 || size > 32) return;
+    document.documentElement.style.setProperty("--note-font-size", size + "px");
+    document.querySelectorAll(".note-font-size").forEach((select) => { select.value = String(size); });
+    syncEditorHighlight();
+  }
+  document.querySelectorAll(".note-font-size").forEach((select) => {
+    for (let size = 12; size <= 32; size++) {
+      const option = node("option", "", size + " px"); option.value = String(size); select.append(option);
+    }
+    select.value = "16";
+    select.addEventListener("change", () => {
+      if (bridge) bridge.postMessage({ command: "noteFontSize", value: select.value });
+      else applyFontSize(Number(select.value));
+    });
+  });
   function button(text, label, click) {
     const value = node("button", "note-action", text);
     value.type = "button"; value.setAttribute("aria-label", label); value.title = label;
@@ -137,7 +173,9 @@
       preview.setAttribute("aria-label", "放大阅读：" + (note.Title || note.Text.slice(0, 40)));
       preview.setAttribute("aria-haspopup", "dialog");
       if (note.Title) preview.append(node("h2", "note-title", note.Title));
-      if (note.Text) preview.append(node("p", "note-body", note.Text));
+      if (note.Text) {
+        const body = node("p", "note-body"); highlight(body, note.Text); preview.append(body);
+      }
       preview.title = "点击阅读全文";
       preview.addEventListener("click", () => { if (!window.getSelection()?.toString()) openReader(note); });
       preview.addEventListener("keydown", (event) => {
@@ -190,7 +228,7 @@
   function refreshReader() {
     const note = notes.find((item) => item.Id === reading);
     $("note-reader-title").textContent = note?.Title || (note ? "便签全文" : "便签已删除");
-    $("note-reader-body").textContent = note?.Text || (note ? "这条便签只有标题。" : "这条便签已在另一处删除。");
+    highlight($("note-reader-body"), note?.Text || (note ? "这条便签只有标题。" : "这条便签已在另一处删除。"));
     $("note-reader-edit").disabled = !note || Boolean(pending) || Boolean(loadError);
   }
   function openReader(note) {
@@ -212,7 +250,7 @@
     $("note-length").textContent = `${$("note-text").value.length} / 2000`;
     $("note-error").textContent = ""; $("note-draft-status").textContent = draft ? "已恢复本机草稿，尚未保存便签。" : "";
     $("note-conflict").hidden = true;
-    $("note-editor").showModal(); syncInteraction(); $("note-text").focus();
+    $("note-editor").showModal(); syncEditorHighlight(); syncInteraction(); $("note-text").focus();
     if (draft && editing && (!note || note.Updated !== editingRevision)) showConflict();
   }
   function showConflict() {
@@ -280,6 +318,9 @@
   $("note-delete-confirm").addEventListener("click", () => request("deleteNote", { id: deleting, revision: deletingRevision }));
   $("note-editor").addEventListener("cancel", (event) => { if (pending || !persistEditor()) event.preventDefault(); });
   $("note-delete-dialog").addEventListener("cancel", (event) => { if (pending) event.preventDefault(); });
+  $("note-text").addEventListener("input", syncEditorHighlight);
+  $("note-text").addEventListener("scroll", syncEditorHighlight);
+  new ResizeObserver(syncEditorHighlight).observe($("note-text"));
   for (const id of ["note-title", "note-text", "note-todo"]) $(id).addEventListener("input", () => { $("note-length").textContent = `${$("note-text").value.length} / 2000`; persistEditor(); });
   $("note-form").addEventListener("submit", (event) => { event.preventDefault(); submitEditor(); });
   $("note-form").addEventListener("keydown", (event) => {
@@ -289,6 +330,7 @@
   bridge?.addEventListener("message", (event) => {
     const data = event.data;
     if (["state", "notesState", "notesOpened"].includes(data?.type)) {
+      if (data.noteFontSize !== undefined) applyFontSize(data.noteFontSize);
       if (edgeMode && data.type === "notesOpened") { filter = "all"; query = ""; $("notes-search").value = ""; $("scroll").scrollTop = 0; $("notes-status").textContent = ""; }
       const changed = JSON.stringify(notes) !== JSON.stringify(data.notes || []) || loadError !== (data.notesError || "");
       notes = data.notes || []; loadError = data.notesError || "";

@@ -47,6 +47,7 @@ namespace DesktopTidy.Core
         internal string OrderDescription { get { return layout.OrderMode == CategoryOrderMode.CountDescending ? "数量降序（一次）" : layout.OrderMode == CategoryOrderMode.CountAscending ? "数量升序（一次）" : "自定义排列"; } }
         internal string LastRefreshDescription { get { return layout.LastRefreshUtcTicks == 0 ? "尚未刷新" : "更新 " + new DateTime(layout.LastRefreshUtcTicks, DateTimeKind.Utc).ToLocalTime().ToString("MM-dd HH:mm:ss"); } }
         private readonly DesktopIconVisibility desktopVisibility = new DesktopIconVisibility();
+        internal int NoteFontSize { get { return layout.NoteFontSize; } }
         internal int OpacityPercent { get { return layout.OpacityPercent; } }
         internal bool HideEmptyGroups { get { return layout.HideEmptyGroups; } }
         internal bool HideIconsOnStartup { get { return layout.HideIconsOnStartup; } }
@@ -802,6 +803,15 @@ namespace DesktopTidy.Core
             Notify("分类已删除，图标已归入剩余分类；原文件未删除，可撤销。"); return true;
         }
         internal List<Category> Categories { get { return layout.Groups.ConvertAll(delegate(GroupState group) { return group.Category; }); } }
+        internal void CommitNoteFontSize(int value)
+        {
+            if (value < 12 || value > 32 || value == layout.NoteFontSize) return;
+            if (!Checkpoint()) return;
+            int previous = layout.NoteFontSize; layout.NoteFontSize = value;
+            if (!Save()) layout.NoteFontSize = previous;
+            if (container != null) container.Sync();
+            if (layout.NoteFontSize == value) Notify("便签字号已设为 " + value + " px；可撤销。");
+        }
         internal void CommitOpacity(int value)
         {
             value = LayoutStore.NormalizeOpacity(value);

@@ -187,7 +187,7 @@ namespace DesktopTidy.UI
             try
             {
                 browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new {
-                    type = opened ? "notesOpened" : "notesState", notes = notes.Notes, notesError = notes.LoadError }));
+                    type = opened ? "notesOpened" : "notesState", notes = notes.Notes, notesError = notes.LoadError, noteFontSize = owner.NoteFontSize }));
             }
             catch (Exception error) { Debug.WriteLine(error); }
         }
@@ -211,7 +211,7 @@ namespace DesktopTidy.UI
                     refreshing = owner.IsRefreshing, hideEmpty = owner.HideEmptyGroups, allCollapsed = owner.AllGroupsCollapsed,
                     nextDescending = owner.NextSortDescending, desktopVisible = owner.DesktopIconsVisible, opacity = owner.OpacityPercent,
                     hideOnStartup = owner.HideIconsOnStartup, dark = theme.Dark, followsSystemTheme = theme.FollowsSystem, highContrast = theme.HighContrast,
-                    notes = notes.Notes, notesError = notes.LoadError, edgeNotesEnabled = owner.EdgeNotesEnabled, edgeNotesDelay = owner.EdgeNotesDelay,
+                    notes = notes.Notes, notesError = notes.LoadError, noteFontSize = owner.NoteFontSize, edgeNotesEnabled = owner.EdgeNotesEnabled, edgeNotesDelay = owner.EdgeNotesDelay,
                     edgeNotesDockSide = owner.EdgeNotesDockSide, edgeNotesDockStatus = owner.EdgeNotesDockStatus, edgeNotesScreen = owner.EdgeNotesScreen, edgeNotesPaused = owner.EdgeNotesPaused,
                     notesScreens = Array.ConvertAll(Screen.AllScreens, screen => new { id = screen.DeviceName, name = screen.DeviceName + (screen.Primary ? "（主屏）" : "") }), updated = owner.LastRefreshDescription, feedback = feedback });
                 if (payload == previous) return;
@@ -301,6 +301,7 @@ namespace DesktopTidy.UI
                 browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "notesResult", request = ReadText(data, "request"), success = success, error = error, notes = notes.Notes }));
                 return;
             }
+            if (command == "noteFontSize") { owner.CommitNoteFontSize(ReadInt(data, "value")); return; }
             if (edgeHost != null)
             {
                 if (command == "move") edgeHost.BeginDrag();

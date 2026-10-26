@@ -1,4 +1,4 @@
-﻿// Temporary stores only. --desktop-startup also mounts its own test workspace HWND
+// Temporary stores only. --desktop-startup also mounts its own test workspace HWND
 // through the production desktop path; it never scans or modifies user icons.
 using System;
 using System.Collections;
@@ -92,8 +92,14 @@ internal static class NotesEdgeNativeChecks
         try
         {
             controller = Make(assembly.GetType("DesktopTidy.UI.NotesEdgeController", true), owner, (Action<string>)delegate(string message) { Console.WriteLine("DOCK " + message); }, key);
+            Call(owner, "CommitOpacity", 65);
             Call(controller, "ShowFromTray");
             Form drawer = (Form)Get(controller, "panel"); Until(() => (bool)Get(drawer, "Ready"), "dock drawer initialization timeout");
+            Check(Math.Abs(drawer.Opacity - 0.65) < 0.001, "drawer inherits global opacity before first reveal");
+            Call(owner, "CommitOpacity", 40); Call(controller, "Tick", null, EventArgs.Empty);
+            Check(Math.Abs(drawer.Opacity - 0.40) < 0.001, "visible drawer follows global opacity changes");
+            Call(owner, "Undo"); Call(controller, "Tick", null, EventArgs.Empty);
+            Check(Math.Abs(drawer.Opacity - 0.65) < 0.001, "drawer follows opacity undo");
             Rectangle work = Screen.PrimaryScreen.WorkingArea;
             foreach (string side in new[] { "Left", "Top", "Right", "Bottom" })
             {
@@ -113,6 +119,11 @@ internal static class NotesEdgeNativeChecks
                 Call(drawer, "Collapse"); Until(() => !drawer.Visible, "dock collapse timeout");
                 Call(controller, "Tick", null, EventArgs.Empty);
                 Form handle = (Form)Get(controller, "dockHandle");
+                Check(handle != null && Math.Abs(handle.Opacity - 0.65) < 0.001, "dock icon inherits global opacity: " + side);
+                Call(owner, "CommitOpacity", 25); Call(controller, "Tick", null, EventArgs.Empty);
+                Check(Math.Abs(handle.Opacity - 0.25) < 0.001, "collapsed icon follows global opacity: " + side);
+                Call(owner, "Undo"); Call(controller, "Tick", null, EventArgs.Empty);
+                Check(Math.Abs(handle.Opacity - 0.65) < 0.001, "collapsed icon follows opacity undo: " + side);
                 Check(handle != null && handle.Visible && work.Contains(handle.Bounds), "collapsed native handle visible: " + side);
                 Check(side == "Left" ? handle.Left == work.Left : side == "Right" ? handle.Right == work.Right : side == "Top" ? handle.Top == work.Top : handle.Bottom == work.Bottom,
                     "native landmark marks correct screen edge: " + side);
@@ -209,6 +220,19 @@ internal static class NotesEdgeNativeChecks
                 Until(() => Count(store) == 2, "main TODO save timeout");
                 Call(panel, "Reveal", new Rectangle(100, 100, 440, 700), Enum.Parse(edge, "Left"), false);
                 Until(() => Script(panel, "document.querySelectorAll('.note-card').length") == "2", "main-to-edge sync timeout");
+                Script(main, "document.getElementById('notes-font-size').value='24'; document.getElementById('notes-font-size').dispatchEvent(new Event('change'))");
+                Until(() => (int)Get(owner, "NoteFontSize") == 24, "main font preference save timeout");
+                Until(() => Script(panel, "document.getElementById('notes-font-size').value") == "\"24\"", "main-to-edge font sync timeout");
+                Check(Script(panel, "getComputedStyle(document.querySelector('.note-body')).fontSize") == "\"24px\"", "main font choice updates real drawer text");
+                Script(panel, "document.getElementById('notes-font-size').value='32'; document.getElementById('notes-font-size').dispatchEvent(new Event('change'))");
+                Until(() => (int)Get(owner, "NoteFontSize") == 32, "drawer font preference save timeout");
+                Until(() => Script(main, "document.getElementById('notes-font-size').value") == "\"32\"", "edge-to-main font sync timeout");
+                Check(Script(main, "getComputedStyle(document.querySelector('.note-body')).fontSize") == "\"32px\"", "drawer font choice updates real main text");
+                Check((int)Get(Call(Get(owner, "store"), "Load"), "NoteFontSize") == 32, "font size survives layout reload");
+                Call(owner, "CommitNoteFontSize", 0); Call(owner, "CommitNoteFontSize", 33);
+                Check((int)Get(owner, "NoteFontSize") == 32, "invalid font sizes cannot replace saved preference");
+                Call(owner, "CommitNoteFontSize", 16);
+                Until(() => Script(panel, "document.getElementById('notes-font-size').value") == "\"16\"", "font reset sync timeout");
                 InspectSurface(panel, "reopened");
                 Call(Get(panel, "web"), "RecreateHandle"); Pump(300);
                 InspectSurface(panel, "recreated");

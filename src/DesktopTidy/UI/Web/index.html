@@ -103,6 +103,7 @@
             </form>
             <div class="notes-toolbar">
               <div class="notes-filters" role="group" aria-label="筛选便签"><button data-note-filter="all" aria-pressed="true">全部</button><button data-note-filter="text" aria-pressed="false">文本</button><button data-note-filter="pending" aria-pressed="false">待办</button><button data-note-filter="done" aria-pressed="false">完成</button></div>
+              <label class="note-font-control" for="notes-font-size"><span>字号</span><select id="notes-font-size" class="note-font-size" aria-label="便签字号"></select></label>
               <div class="notes-find"><input type="search" id="notes-search" aria-label="搜索便签" placeholder="搜索便签" /></div>
             </div>
             <button id="notes-completed" aria-expanded="false" hidden>展开已完成</button>
@@ -188,14 +189,14 @@
       <div class="dialog-header"><h2 id="note-reader-title">便签全文</h2><button type="button" id="note-reader-close" aria-label="关闭放大阅读">×</button></div>
 
       <div id="note-reader-body" tabindex="0" role="region" aria-label="便签全文内容"></div>
-      <div class="note-reader-actions"><span class="reader-mode">只读</span><button type="button" class="primary" id="note-reader-edit">编辑</button></div>
+      <div class="note-reader-actions"><div class="note-reader-options"><span class="reader-mode">只读</span><label class="note-font-control" for="note-reader-font-size"><span>字号</span><select id="note-reader-font-size" class="note-font-size" aria-label="阅读字号"></select></label></div><button type="button" class="primary" id="note-reader-edit">编辑</button></div>
     </dialog>
     <dialog id="note-editor" aria-labelledby="note-editor-title">
       <form id="note-form">
         <div class="dialog-header"><h2 id="note-editor-title">新建便签</h2><button type="button" id="note-close" aria-label="关闭便签编辑">×</button></div>
 
         <label class="note-label" for="note-title">标题 <span>选填</span></label><input id="note-title" maxlength="80" placeholder="标题" />
-        <label class="note-label" for="note-text">内容 <span id="note-length">0 / 2000</span></label><textarea id="note-text" maxlength="2000" rows="7" placeholder="写点什么…"></textarea>
+        <div class="note-content-heading"><label class="note-label" for="note-text">内容 <span id="note-length">0 / 2000</span></label><label class="note-font-control" for="note-editor-font-size"><span>字号</span><select id="note-editor-font-size" class="note-font-size" aria-label="编辑字号"></select></label></div><div class="note-editor-surface"><pre id="note-highlight" aria-hidden="true"></pre><textarea id="note-text" maxlength="2000" rows="7" placeholder="写点什么…" spellcheck="false"></textarea></div>
         <label class="note-todo-option"><input type="checkbox" id="note-todo" />设为待办</label>
         <p id="note-draft-status" role="status"></p>
         <section id="note-conflict" class="note-conflict" hidden aria-label="便签版本冲突"><p>另一处的修改不会覆盖你的草稿。</p><details><summary>查看已保存的新版</summary><p id="note-latest"></p></details><div><button type="button" id="note-copy-draft">复制我的草稿</button><button type="button" id="note-save-copy">另存为新便签</button></div></section>

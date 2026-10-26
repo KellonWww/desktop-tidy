@@ -102,6 +102,10 @@ certutil -hashfile DesktopTidy-latest-win-x64.zip SHA256
 
 展开不抢焦点，点击后可输入。混合 DPI 多屏、全屏游戏和长期驻留表现仍需人工验收。
 
+便签支持 **12–32 px 字号调整**：列表工具栏、编辑器和阅读窗口均可切换，主工作区与边缘便签同步，重启后保留；旧布局自动使用 16 px。
+
+便签卡片、放大阅读和编辑区使用交替行底色，并自动着色常见代码 / SQL 关键字、字符串、数字、注释、链接与行内代码；内容仍按纯文本保存和复制，不执行 HTML。浅色为白 / 浅灰，深色自动适配。边缘便签整窗及磁吸把手同步全局不透明度（含撤销与重新打开）。
+
 ## 数据与安全
 
 | 数据 | 本机位置 |
@@ -168,7 +172,7 @@ python scripts/package-release.py
 
 ### 验证
 
-本轮已通过严格编译、3 套隔离浏览器回归与 **67 项原生 WebView2 检查**，覆盖便签操作、草稿、冲突、阅读编辑、防误触、四边磁吸、位置记忆和窗口恢复；不代表完整桌面兼容性验收。
+本轮已通过严格编译、4 套隔离浏览器回归与 **86 项原生 WebView2 检查**，覆盖便签操作、草稿、冲突、阅读编辑、防误触、四边磁吸、位置记忆和窗口恢复；不代表完整桌面兼容性验收。
 
 ```bash
 build/notes-dpi-fixed/NotesChecks.exe
@@ -177,6 +181,7 @@ build/notes-dpi-fixed/NotesEdgeNativeChecks.exe --desktop-startup
 python tools/notes-ui-checks.py
 python tools/notes-edge-ui-checks.py
 python tools/notes-product-checks.py
+python tools/notes-appearance-checks.py
 ```
 
 浏览器检查需要 Python Playwright 与 Chromium，使用模拟桥接；`--build-dir` 或 `BUILD_DIR` 可指定构建目录。

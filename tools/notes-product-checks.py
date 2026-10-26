@@ -172,7 +172,7 @@ def main():
         expect(edge.locator("#note-editor")).to_be_visible()
         expect(edge.locator("#note-text")).to_have_value(long_text)
         assert edge.locator("#note-text").bounding_box()["height"] >= 300
-        assert edge.locator("#note-text").evaluate("e => parseFloat(getComputedStyle(e).fontSize)") >= 17
+        assert edge.locator("#note-text").evaluate("e => parseFloat(getComputedStyle(e).fontSize)") == int(edge.locator("#note-editor-font-size").input_value())
         if args.screenshots:
             edge.screenshot(path=str(args.screenshots / "notes-focus-editing.png"), animations="disabled")
         edge.locator("#note-cancel").click()

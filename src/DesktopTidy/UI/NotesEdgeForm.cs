@@ -10,6 +10,7 @@ namespace DesktopTidy.UI
     internal sealed class NotesEdgeForm : Form
     {
         private readonly WebWorkspace web;
+        private readonly WorkspaceController owner;
         private readonly Label notice;
         private readonly Button close;
         private const double MotionDurationMilliseconds = 180.0;
@@ -35,6 +36,8 @@ namespace DesktopTidy.UI
 
         internal NotesEdgeForm(WorkspaceController owner)
         {
+            this.owner = owner;
+            SyncOpacity(owner.OpacityPercent);
             Text = "桌面整理 · 边缘便签"; AccessibleName = Text;
             FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true;
             StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None;
@@ -66,6 +69,7 @@ namespace DesktopTidy.UI
         internal void Reveal(Rectangle bounds, NotesEdge side, bool activate)
         {
             if (IsDisposed) return;
+            SyncOpacity(owner.OpacityPercent);
             frames.Stop(); animating = false;
             bool wasVisible = Visible;
             Point previousLocation = Location;
@@ -158,6 +162,11 @@ namespace DesktopTidy.UI
             notice.Text = "边缘便签暂不可用，原便签数据未更改。\n请从托盘重新打开重试；桌面分类不受影响。\n\n" + message;
             notice.Visible = true; notice.BringToFront();
             Debug.WriteLine("Edge notes: " + message);
+        }
+        internal void SyncOpacity(int percent)
+        {
+            double opacity = percent / 100.0;
+            if (!IsDisposed && Opacity != opacity) Opacity = opacity;
         }
         internal void RefreshTheme() { if (!IsDisposed) { Theme.Read().Apply(this); if (Visible) web.Publish(); } }
         protected override void OnSizeChanged(EventArgs e)

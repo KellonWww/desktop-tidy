@@ -27,6 +27,7 @@ namespace DesktopTidy.Core
     {
         [DataMember] public int Schema = 2;
         [DataMember] public int OpacityPercent = 100;
+        [DataMember] public int NoteFontSize = 16;
         [DataMember] public bool HideIconsOnStartup;
         [DataMember] public bool FirstRunCompleted;
         [DataMember] public bool HideEmptyGroups;
@@ -57,6 +58,7 @@ namespace DesktopTidy.Core
                 using (var stream = File.OpenRead(path))
                 {
                     var state = (LayoutState)layoutSerializer.ReadObject(stream);
+                    if (state != null && state.NoteFontSize == 0) state.NoteFontSize = 16;
                     if (state != null && state.DeletedCategories == null) state.DeletedCategories = new List<Category>();
                     if (state != null && state.Schema == 1)
                     {
@@ -88,6 +90,7 @@ namespace DesktopTidy.Core
         private static void Validate(LayoutState state)
         {
             if (state == null || state.Schema != 2 || state.OpacityPercent < 25 || state.OpacityPercent > 100 || state.Groups == null || state.Assignments == null || state.DeletedCategories == null || state.DeletedCategories.Count > Enum.GetValues(typeof(Category)).Length || state.Groups.Count > Enum.GetValues(typeof(Category)).Length || state.Assignments.Count > 3000) throw new InvalidDataException("布局格式不受支持");
+            if (state.NoteFontSize < 12 || state.NoteFontSize > 32) throw new InvalidDataException("便签字号无效");
             if (state.WorkspaceWidth != 0 || state.WorkspaceHeight != 0)
                 if (state.WorkspaceWidth < 320 || state.WorkspaceWidth > 16384 || state.WorkspaceHeight < 200 || state.WorkspaceHeight > 16384 || Math.Abs((long)state.WorkspaceX) > 100000 || Math.Abs((long)state.WorkspaceY) > 100000)
                     throw new InvalidDataException("工作区窗口边界无效");

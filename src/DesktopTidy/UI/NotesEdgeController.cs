@@ -141,6 +141,7 @@ namespace DesktopTidy.UI
         private void Tick(object sender, EventArgs e)
         {
             if (disposed) return;
+            if (panel != null) panel.SyncOpacity(owner.OpacityPercent);
             Point pointer = Cursor.Position;
             if (panel != null && panel.Dragging) { if (dockHandle != null) dockHandle.Hide(); return; }
             UpdateHandle();
@@ -181,6 +182,8 @@ namespace DesktopTidy.UI
             if (!Enabled || (panel != null && panel.Visible) || !Allows(screen) || Fullscreen(screen))
             { if (dockHandle != null) dockHandle.Hide(); return; }
             if (dockHandle == null) dockHandle = new NotesDockHandle(ShowFromTray);
+            double opacity = owner.OpacityPercent / 100.0;
+            if (dockHandle.Opacity != opacity) dockHandle.Opacity = opacity;
             Rectangle bounds = NotesEdgeGeometry.HandleBounds(screen.WorkingArea, dockSide, Scale());
             string signature = bounds + ":" + dockSide + ":" + screen.DeviceName + ":" + owner.EdgeNotesPaused;
             if (handleSignature != signature || !dockHandle.Visible)
