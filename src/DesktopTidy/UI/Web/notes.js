@@ -59,6 +59,63 @@
     backdrop.scrollTop = input.scrollTop;
     backdrop.scrollLeft = input.scrollLeft;
   }
+  function keepNoteWindowVisible(dialog) {
+    if (!dialog.open) return;
+    const gap = 8, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
+    const rect = dialog.getBoundingClientRect();
+    const width = Math.min(rect.width, Math.max(1, viewportWidth - gap * 2));
+    const height = Math.min(rect.height, Math.max(1, viewportHeight - gap * 2));
+    const left = Math.max(gap, Math.min(rect.left, viewportWidth - width - gap));
+    const top = Math.max(gap, Math.min(rect.top, viewportHeight - height - gap));
+    dialog.style.position = "fixed"; dialog.style.inset = "auto"; dialog.style.margin = "0";
+    dialog.style.left = left + "px"; dialog.style.top = top + "px";
+    if (rect.width > width) dialog.style.width = width + "px";
+    if (rect.height > height) dialog.style.height = height + "px";
+  }
+  function wireNoteWindow(dialog) {
+    const header = dialog.querySelector(".dialog-header");
+    const resize = button("", "调整便签窗口大小", () => {}); resize.className = "note-window-resize";
+    resize.type = "button"; resize.title = "拖动调整窗口大小"; resize.setAttribute("aria-label", "调整便签窗口大小");
+    dialog.append(resize);
+    const begin = (event, resizing) => {
+      if (event.button !== 0 || (!resizing && event.target.closest("button,input,select,textarea,a"))) return;
+      const rect = dialog.getBoundingClientRect(), pointer = event.currentTarget;
+      const startX = event.clientX, startY = event.clientY;
+      const minWidth = Math.min(360, Math.max(1, window.innerWidth - 16));
+      const minHeight = Math.min(260, Math.max(1, window.innerHeight - 16));
+      dialog.style.position = "fixed"; dialog.style.inset = "auto"; dialog.style.margin = "0";
+      dialog.style.left = rect.left + "px"; dialog.style.top = rect.top + "px";
+      if (resizing) { dialog.style.width = rect.width + "px"; dialog.style.height = rect.height + "px"; }
+      dialog.classList.add(resizing ? "note-window-resizing" : "note-window-moving");
+      event.preventDefault(); pointer.setPointerCapture(event.pointerId);
+      const move = (next) => {
+        if (next.pointerId !== event.pointerId) return;
+        if (resizing) {
+          const width = Math.max(minWidth, Math.min(rect.width + next.clientX - startX, window.innerWidth - rect.left - 8));
+          const height = Math.max(minHeight, Math.min(rect.height + next.clientY - startY, window.innerHeight - rect.top - 8));
+          dialog.style.width = width + "px"; dialog.style.height = height + "px";
+        } else {
+          const left = Math.max(8, Math.min(rect.left + next.clientX - startX, window.innerWidth - rect.width - 8));
+          const top = Math.max(8, Math.min(rect.top + next.clientY - startY, window.innerHeight - rect.height - 8));
+          dialog.style.left = left + "px"; dialog.style.top = top + "px";
+        }
+      };
+      const end = (next) => {
+        if (next.pointerId !== event.pointerId) return;
+        pointer.removeEventListener("pointermove", move); pointer.removeEventListener("pointerup", end); pointer.removeEventListener("pointercancel", end);
+        dialog.classList.remove("note-window-moving", "note-window-resizing");
+        if (pointer.hasPointerCapture(event.pointerId)) pointer.releasePointerCapture(event.pointerId);
+        keepNoteWindowVisible(dialog);
+      };
+      pointer.addEventListener("pointermove", move); pointer.addEventListener("pointerup", end); pointer.addEventListener("pointercancel", end);
+    };
+    header.title = "按住拖动窗口";
+    header.addEventListener("pointerdown", (event) => begin(event, false));
+    resize.addEventListener("pointerdown", (event) => begin(event, true));
+  }
+  [$("note-reader"), $("note-editor")].forEach(wireNoteWindow);
+  window.addEventListener("resize", () => [$("note-reader"), $("note-editor")].forEach(keepNoteWindowVisible));
+
   function applyFontSize(size) {
     if (!Number.isInteger(size) || size < 12 || size > 32) return;
     document.documentElement.style.setProperty("--note-font-size", size + "px");
@@ -233,7 +290,7 @@
   }
   function openReader(note) {
     if (pending || loadError || $("note-reader").open) return;
-    reading = note.Id; refreshReader(); $("note-reader").showModal(); syncInteraction();
+    reading = note.Id; refreshReader(); $("note-reader").showModal(); keepNoteWindowVisible($("note-reader")); syncInteraction();
     $("note-reader-body").scrollTop = 0; $("note-reader-body").focus();
   }
   function openEditor(note, restoredKey) {
@@ -250,7 +307,7 @@
     $("note-length").textContent = `${$("note-text").value.length} / 2000`;
     $("note-error").textContent = ""; $("note-draft-status").textContent = draft ? "已恢复本机草稿，尚未保存便签。" : "";
     $("note-conflict").hidden = true;
-    $("note-editor").showModal(); syncEditorHighlight(); syncInteraction(); $("note-text").focus();
+    $("note-editor").showModal(); keepNoteWindowVisible($("note-editor")); syncEditorHighlight(); syncInteraction(); $("note-text").focus();
     if (draft && editing && (!note || note.Updated !== editingRevision)) showConflict();
   }
   function showConflict() {

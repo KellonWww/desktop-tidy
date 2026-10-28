@@ -1256,6 +1256,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 #edge-pause { width: 100%; text-align: center; color: var(--ink); background: var(--paper); border-radius: 7px; padding: 10px; margin-top: 16px; }
 #edge-pause:hover { background: var(--hover); }
 #note-reader, #note-editor { width: min(860px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 28px; box-sizing: border-box; overflow: auto; }
+#note-reader .dialog-header, #note-editor .dialog-header { cursor: move; user-select: none; touch-action: none; }
+#note-reader .dialog-header button, #note-editor .dialog-header button { cursor: pointer; }
+.note-window-resize { position: absolute; right: 5px; bottom: 5px; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; background: transparent; cursor: nwse-resize; touch-action: none; z-index: 4; }
+.note-window-resize::before { content: ""; position: absolute; right: 4px; bottom: 4px; width: 11px; height: 11px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); opacity: .75; }
+.note-window-resize:hover::before, .note-window-resize:focus-visible::before { border-color: var(--accent); opacity: 1; }
+.note-window-moving, .note-window-moving * { cursor: move !important; }
+.note-window-resizing, .note-window-resizing * { cursor: nwse-resize !important; user-select: none !important; }
 #note-reader[open] { display: flex; flex-direction: column; height: min(820px, calc(100dvh - 32px)); }
 #note-reader .dialog-header { flex-shrink: 0; align-items: start; margin-bottom: 8px; }
 #note-reader-title { font-size: calc(var(--note-font-size) + 4px); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 25dvh; overflow: auto; }

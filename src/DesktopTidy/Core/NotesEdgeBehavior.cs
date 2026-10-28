@@ -34,12 +34,16 @@ namespace DesktopTidy.Core
             return side == NotesEdge.Top ? "顶部" : side == NotesEdge.Right ? "右侧" : side == NotesEdge.Bottom ? "底部" : "左侧";
         }
         internal static Rectangle HandleBounds(Rectangle work, NotesEdge side, float scale)
+        { return HandleBounds(work, side, scale, 5000); }
+        internal static Rectangle HandleBounds(Rectangle work, NotesEdge side, float scale, int position)
         {
             bool vertical = side == NotesEdge.Left || side == NotesEdge.Right;
             int width = Math.Min(work.Width, Math.Max(1, (int)((vertical ? 28 : 96) * scale)));
             int height = Math.Min(work.Height, Math.Max(1, (int)((vertical ? 88 : 28) * scale)));
-            int x = side == NotesEdge.Left ? work.Left : side == NotesEdge.Right ? work.Right - width : work.Left + (work.Width - width) / 2;
-            int y = side == NotesEdge.Top ? work.Top : side == NotesEdge.Bottom ? work.Bottom - height : work.Top + (work.Height - height) / 2;
+            int range = vertical ? work.Height - height : work.Width - width;
+            int offset = range <= 0 ? 0 : (int)Math.Round(range * Math.Max(0, Math.Min(10000, position)) / 10000.0);
+            int x = side == NotesEdge.Left ? work.Left : side == NotesEdge.Right ? work.Right - width : work.Left + offset;
+            int y = side == NotesEdge.Top ? work.Top : side == NotesEdge.Bottom ? work.Bottom - height : work.Top + offset;
             return new Rectangle(x, y, width, height);
         }
         internal static Rectangle PanelBounds(Rectangle work, NotesEdge side, float scale)

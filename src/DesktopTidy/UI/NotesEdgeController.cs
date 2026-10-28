@@ -19,6 +19,7 @@ namespace DesktopTidy.UI
         private NotesDockHandle dockHandle;
         private string handleSignature;
         private NotesEdge dockSide = NotesEdge.Left;
+        private int dockPosition = 5000;
         private readonly WorkspaceController owner;
         private readonly Action<string> notify;
         private readonly Timer watch = new Timer { Interval = 50 };
@@ -63,10 +64,11 @@ namespace DesktopTidy.UI
                     if (key == null) return;
                     string[] dock = Convert.ToString(key.GetValue("EdgeNotesDock", "Left|")).Split('|');
                     NotesEdge savedSide;
-                    if (dock.Length == 2 && Enum.TryParse<NotesEdge>(dock[0], out savedSide) && savedSide != NotesEdge.None && Enum.IsDefined(typeof(NotesEdge), savedSide))
+                    if (dock.Length >= 2 && Enum.TryParse<NotesEdge>(dock[0], out savedSide) && savedSide != NotesEdge.None && Enum.IsDefined(typeof(NotesEdge), savedSide))
                     {
                         dockSide = savedSide; owner.EdgeNotesDockSide = dockSide.ToString(); owner.EdgeNotesDockScreen = dock[1];
                     }
+                    dockPosition = Math.Max(0, Math.Min(10000, Convert.ToInt32(key.GetValue("EdgeNotesHandlePosition", 5000))));
                     string[] options = Convert.ToString(key.GetValue("EdgeNotesOptions", "600|all")).Split('|');
                     int delay = options.Length == 2 ? Convert.ToInt32(options[0]) : 600;
                     owner.EdgeNotesDelay = delay == 300 || delay == 600 || delay == 1000 ? delay : 600;
@@ -144,6 +146,7 @@ namespace DesktopTidy.UI
             if (panel != null) panel.SyncOpacity(owner.OpacityPercent);
             Point pointer = Cursor.Position;
             if (panel != null && panel.Dragging) { if (dockHandle != null) dockHandle.Hide(); return; }
+            if (dockHandle != null && dockHandle.Dragging) return;
             UpdateHandle();
             if (panel != null && panel.Visible)
             {
@@ -181,16 +184,35 @@ namespace DesktopTidy.UI
             Screen screen = DockScreen();
             if (!Enabled || (panel != null && panel.Visible) || !Allows(screen) || Fullscreen(screen))
             { if (dockHandle != null) dockHandle.Hide(); return; }
-            if (dockHandle == null) dockHandle = new NotesDockHandle(ShowFromTray);
+            if (dockHandle == null) dockHandle = new NotesDockHandle(ShowFromTray, MoveHandle);
             double opacity = owner.OpacityPercent / 100.0;
             if (dockHandle.Opacity != opacity) dockHandle.Opacity = opacity;
-            Rectangle bounds = NotesEdgeGeometry.HandleBounds(screen.WorkingArea, dockSide, Scale());
-            string signature = bounds + ":" + dockSide + ":" + screen.DeviceName + ":" + owner.EdgeNotesPaused;
+            Rectangle bounds = NotesEdgeGeometry.HandleBounds(screen.WorkingArea, dockSide, Scale(), dockPosition);
+            string signature = bounds + ":" + dockSide + ":" + screen.DeviceName + ":" + owner.EdgeNotesPaused + ":" + dockPosition;
             if (handleSignature != signature || !dockHandle.Visible)
             {
                 dockHandle.Place(bounds, dockSide, screen.DeviceName, owner.EdgeNotesPaused); handleSignature = signature;
             }
             owner.EdgeNotesDockStatus = DockStatus(screen);
+        }
+        private void MoveHandle(int position)
+        {
+            if (disposed) return;
+            dockPosition = Math.Max(0, Math.Min(10000, position)); handleSignature = null;
+            try
+            {
+                using (var key = Registry.CurrentUser.CreateSubKey(preferences))
+                {
+                    if (key == null) throw new IOException("无法打开个人设置");
+                    key.SetValue("EdgeNotesHandlePosition", dockPosition, RegistryValueKind.DWord);
+                }
+            }
+            catch (Exception error)
+            {
+                if (!SettingsError(error)) throw;
+                Debug.WriteLine(error); notify("便签把手位置保存失败，本次仍可继续使用。");
+            }
+            owner.EdgeNotesDockStatus = DockStatus(DockScreen());
         }
         private string DockStatus(Screen screen)
         { return "已吸附" + NotesEdgeGeometry.Name(dockSide) + "（" + screen.DeviceName + "）· 收起后留有便签把手"; }

@@ -127,6 +127,23 @@ internal static class NotesEdgeNativeChecks
                 Check(handle != null && handle.Visible && work.Contains(handle.Bounds), "collapsed native handle visible: " + side);
                 Check(side == "Left" ? handle.Left == work.Left : side == "Right" ? handle.Right == work.Right : side == "Top" ? handle.Top == work.Top : handle.Bottom == work.Bottom,
                     "native landmark marks correct screen edge: " + side);
+                Rectangle handleBefore = handle.Bounds;
+                Point handleStart = new Point(handleBefore.Left + handleBefore.Width / 2, handleBefore.Top + handleBefore.Height / 2);
+                Point handleTarget = side == "Left" || side == "Right" ? new Point(handleStart.X + 160, handleStart.Y + 120) :
+                    new Point(handleStart.X + 120, handleStart.Y + 160);
+                Call(handle, "StartDrag", handleStart); Call(handle, "ContinueDrag", handleTarget, true);
+                Check((bool)Get(handle, "Dragging"), "collapsed handle enters drag mode: " + side);
+                Check(side == "Left" ? handle.Left == work.Left : side == "Right" ? handle.Right == work.Right : side == "Top" ? handle.Top == work.Top : handle.Bottom == work.Bottom,
+                    "collapsed handle remains attached while dragging: " + side);
+                Check(side == "Left" || side == "Right" ? handle.Top != handleBefore.Top : handle.Left != handleBefore.Left,
+                    "collapsed handle moves only along its edge: " + side);
+                Call(handle, "ContinueDrag", handleTarget, false); Pump(30);
+                Check(!(bool)Get(handle, "Dragging"), "collapsed handle leaves drag mode: " + side);
+                using (var saved = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(key))
+                    Check(Convert.ToInt32(saved.GetValue("EdgeNotesHandlePosition", -1)) == (int)Get(controller, "dockPosition"), "collapsed handle position persisted: " + side);
+                Call(controller, "Tick", null, EventArgs.Empty);
+                Check(side == "Left" ? handle.Left == work.Left : side == "Right" ? handle.Right == work.Right : side == "Top" ? handle.Top == work.Top : handle.Bottom == work.Bottom,
+                    "persisted handle remains attached after refresh: " + side);
                 ((Button)handle.Controls[0]).PerformClick();
                 Check(drawer.Visible && !handle.Visible, "handle click reopens docked drawer: " + side);
             }

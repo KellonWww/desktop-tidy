@@ -95,6 +95,25 @@ def main():
         page.locator("#note-discard").click()
         page.reload(); page.locator("#notes-nav").click()
         expect(page.locator("#note-drafts")).not_to_be_visible()
+        # Reading and editing surfaces can be resized and then moved within the workspace.
+        page.locator(".note-preview").first.click()
+        reader_before = page.locator("#note-reader").bounding_box()
+        reader_grip = page.locator("#note-reader .note-window-resize").bounding_box()
+        page.mouse.move(reader_grip["x"] + 12, reader_grip["y"] + 12); page.mouse.down(); page.mouse.move(reader_grip["x"] - 68, reader_grip["y"] - 48); page.mouse.up()
+        reader_resized = page.locator("#note-reader").bounding_box()
+        assert reader_resized["width"] < reader_before["width"] - 40 and reader_resized["height"] < reader_before["height"] - 30
+        reader_title = page.locator("#note-reader-title").bounding_box()
+        page.mouse.move(reader_title["x"] + 20, reader_title["y"] + 12); page.mouse.down(); page.mouse.move(reader_title["x"] + 55, reader_title["y"] + 42); page.mouse.up()
+        reader_moved = page.locator("#note-reader").bounding_box()
+        assert reader_moved["x"] > reader_resized["x"] + 20 and reader_moved["y"] > reader_resized["y"] + 15
+        page.locator("#note-reader-edit").click()
+        editor_before = page.locator("#note-editor").bounding_box()
+        editor_title = page.locator("#note-editor-title").bounding_box()
+        page.mouse.move(editor_title["x"] + 20, editor_title["y"] + 12); page.mouse.down(); page.mouse.move(editor_title["x"] + 48, editor_title["y"] + 34); page.mouse.up()
+        editor_moved = page.locator("#note-editor").bounding_box()
+        assert editor_moved["x"] > editor_before["x"] + 15
+        assert page.locator("#note-editor .note-window-resize").count() == 1
+        page.locator("#note-cancel").click()
         # Preferences operate through the bridge rather than silently changing UI only.
         page.locator("#notes-edge-settings summary").click()
         page.locator("#edge-delay").select_option("1000")
@@ -161,6 +180,7 @@ def main():
         assert edge.locator("#note-reader textarea").count() == 0
         edge.wait_for_function("() => mock.commands.filter(m => m.command === 'notesInteraction').at(-1).value === 'true'")
         assert edge.locator("#note-reader-body").bounding_box()["height"] > 400
+        assert edge.locator("#note-reader .note-window-resize").count() == 1
         if args.screenshots:
             edge.screenshot(path=str(args.screenshots / "notes-focus-reading.png"), animations="disabled")
         edge.keyboard.press("Escape")
@@ -173,6 +193,7 @@ def main():
         expect(edge.locator("#note-text")).to_have_value(long_text)
         assert edge.locator("#note-text").bounding_box()["height"] >= 300
         assert edge.locator("#note-text").evaluate("e => parseFloat(getComputedStyle(e).fontSize)") == int(edge.locator("#note-editor-font-size").input_value())
+        assert edge.locator("#note-editor .note-window-resize").count() == 1
         if args.screenshots:
             edge.screenshot(path=str(args.screenshots / "notes-focus-editing.png"), animations="disabled")
         edge.locator("#note-cancel").click()

@@ -92,7 +92,7 @@ namespace DesktopTidy.UI
         [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
         internal void BeginDrag()
         {
-            if (!Visible || collapsing || Dragging || (Control.MouseButtons & MouseButtons.Left) == 0) return;
+            if (!Visible || collapsing || Dragging || (GetAsyncKeyState(0x01) & 0x8000) == 0) return;
             StartDrag(Cursor.Position);
         }
         internal void StartDrag(Point point)
@@ -102,7 +102,7 @@ namespace DesktopTidy.UI
         }
         private void DragTick(object sender, EventArgs e)
         {
-            ContinueDrag(Cursor.Position, (Control.MouseButtons & MouseButtons.Left) != 0, (GetAsyncKeyState(0x1B) & 0x8000) != 0);
+            ContinueDrag(Cursor.Position, (GetAsyncKeyState(0x01) & 0x8000) != 0, (GetAsyncKeyState(0x1B) & 0x8000) != 0);
         }
         internal void ContinueDrag(Point point, bool leftDown, bool cancel)
         {
@@ -257,15 +257,69 @@ namespace DesktopTidy.UI
     {
         private readonly NotesDockButton button;
         private readonly ToolTip tip = new ToolTip();
+        private readonly Action open;
+        private readonly Action<int> moved;
+        private NotesEdge side;
+        private Rectangle workArea, dragBounds;
+        private Point dragStart;
+        private bool dragMoved, suppressClick;
+        internal bool Dragging { get; private set; }
         protected override bool ShowWithoutActivation { get { return true; } }
         protected override CreateParams CreateParams
         { get { var value = base.CreateParams; value.ExStyle |= 0x80 | 0x08000000; return value; } }
-        internal NotesDockHandle(Action open)
+        internal NotesDockHandle(Action open, Action<int> moved)
         {
+            this.open = open; this.moved = moved;
             Text = "便签停靠位置"; FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false;
             TopMost = true; StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None; MinimumSize = new Size(1, 1);
-            button = new NotesDockButton { Dock = DockStyle.Fill, Cursor = Cursors.Hand, TabStop = false };
-            button.Click += delegate { open(); }; Controls.Add(button);
+            button = new NotesDockButton { Dock = DockStyle.Fill, TabStop = false };
+            button.MouseDown += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left) return;
+                button.Capture = true; StartDrag(Cursor.Position);
+            };
+            button.MouseMove += delegate
+            {
+                if (Dragging) ContinueDrag(Cursor.Position, true);
+            };
+            button.MouseUp += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left) return;
+                ContinueDrag(Cursor.Position, false); button.Capture = false;
+            };
+            button.Click += delegate { if (suppressClick) suppressClick = false; else open(); };
+            button.MouseCaptureChanged += delegate { if (Dragging && !button.Capture) Dragging = false; };
+            Controls.Add(button);
+        }
+        internal void StartDrag(Point point)
+        {
+            if (!Visible || Dragging) return;
+            dragStart = point; dragBounds = Bounds; dragMoved = false; Dragging = true;
+        }
+        internal void ContinueDrag(Point point, bool leftDown)
+        {
+            if (!Dragging) return;
+            int dx = point.X - dragStart.X, dy = point.Y - dragStart.Y;
+            if (leftDown)
+            {
+                Size threshold = SystemInformation.DragSize;
+                if (!dragMoved && Math.Abs(dx) < threshold.Width / 2 && Math.Abs(dy) < threshold.Height / 2) return;
+                dragMoved = true; suppressClick = true;
+                bool vertical = side == NotesEdge.Left || side == NotesEdge.Right;
+                int x = side == NotesEdge.Left ? workArea.Left : side == NotesEdge.Right ? workArea.Right - Width :
+                    Math.Max(workArea.Left, Math.Min(workArea.Right - Width, dragBounds.Left + dx));
+                int y = side == NotesEdge.Top ? workArea.Top : side == NotesEdge.Bottom ? workArea.Bottom - Height :
+                    Math.Max(workArea.Top, Math.Min(workArea.Bottom - Height, dragBounds.Top + dy));
+                Location = new Point(x, y);
+                return;
+            }
+            Dragging = false;
+            if (!dragMoved) return;
+            bool alongVertical = side == NotesEdge.Left || side == NotesEdge.Right;
+            int range = alongVertical ? workArea.Height - Height : workArea.Width - Width;
+            int offset = alongVertical ? Top - workArea.Top : Left - workArea.Left;
+            moved(range <= 0 ? 5000 : (int)Math.Round(offset * 10000.0 / range));
+            if (suppressClick && IsHandleCreated) BeginInvoke((Action)delegate { suppressClick = false; });
         }
         protected override void CreateHandle()
         {
@@ -275,7 +329,8 @@ namespace DesktopTidy.UI
         [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
         internal void Place(Rectangle bounds, NotesEdge side, string screen, bool paused)
         {
-            Bounds = bounds;
+            this.side = side; workArea = Screen.FromRectangle(bounds).WorkingArea; Bounds = bounds;
+            button.Cursor = side == NotesEdge.Left || side == NotesEdge.Right ? Cursors.SizeNS : Cursors.SizeWE;
             Theme theme = Theme.Read(); BackColor = theme.Surface;
             button.SetAppearance(theme, side, paused);
             using (var outline = NotesDockButton.Outline(ClientSize, side))
@@ -284,7 +339,7 @@ namespace DesktopTidy.UI
                 if (previous != null) previous.Dispose();
             }
             button.AccessibleName = "打开停靠在" + screen + " · " + NotesEdgeGeometry.Name(side) + "的便签";
-            tip.SetToolTip(button, button.AccessibleName + (paused ? "（已暂停悬停呼出，点击仍可打开）" : "；悬停或点击打开"));
+            tip.SetToolTip(button, button.AccessibleName + (paused ? "（已暂停悬停呼出；点击打开，拖动调整位置）" : "；悬停或点击打开，拖动调整位置"));
             if (!Visible) Show();
         }
         protected override void Dispose(bool disposing)
