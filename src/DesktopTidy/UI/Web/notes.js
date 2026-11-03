@@ -30,7 +30,12 @@
   }
   function writeLocal(name, value) {
     if ((name === "drafts" && draftFault) || (name === "quick" && quickFault)) return false;
-    try { localStorage.setItem(storagePrefix + "." + name, JSON.stringify(value)); return true; }
+    try {
+      const serialized = JSON.stringify(value);
+      localStorage.setItem(storagePrefix + "." + name, serialized);
+      bridge?.postMessage({ command: "saveDraft", name, value: serialized });
+      return true;
+    }
     catch (error) { console.warn("Notes draft write failed", error); return false; }
   }
   function node(tag, className, text) {
@@ -265,8 +270,9 @@
       if (!target) document.querySelector(`[data-note-filter="${filter}"]`).focus({ preventScroll: true });
     }
   }
+  // Reading must not pin the drawer open; editing and in-flight operations remain protected.
   function syncInteraction() {
-    const active = Boolean(pending || $("note-reader").open || $("note-editor").open || $("note-delete-dialog").open || (document.activeElement?.closest("#quick-note-form") && $("quick-note").value.trim()));
+    const active = Boolean(pending || $("note-editor").open || $("note-delete-dialog").open || (document.activeElement?.closest("#quick-note-form") && $("quick-note").value.trim()));
     if (edgeMode && active !== lastInteraction) { lastInteraction = active; bridge?.postMessage({ command: "notesInteraction", value: String(active) }); }
   }
   function setBusy() {
@@ -386,6 +392,10 @@
   document.querySelectorAll("[data-note-filter]").forEach((item) => item.addEventListener("click", () => { filter = item.dataset.noteFilter; render(); }));
   bridge?.addEventListener("message", (event) => {
     const data = event.data;
+    if (data?.type === "draftBackupResult") {
+      if (!data.success) $("notes-status").textContent = "独立草稿备份失败，浏览器草稿仍保留；请复制重要内容。";
+      return;
+    }
     if (["state", "notesState", "notesOpened"].includes(data?.type)) {
       if (data.noteFontSize !== undefined) applyFontSize(data.noteFontSize);
       if (edgeMode && data.type === "notesOpened") { filter = "all"; query = ""; $("notes-search").value = ""; $("scroll").scrollTop = 0; $("notes-status").textContent = ""; }
@@ -426,6 +436,30 @@
     if (operation.command === "deleteNote") $("note-delete-dialog").close();
     render();
     if (data.success && operation.command === "saveNote" && operation.source === "quick") $("quick-note").focus();
+  });
+  // Only select note content; toolbar focus must not fall back to browser-wide selection.
+  document.addEventListener("keydown", (event) => {
+    if (!document.body.classList.contains("show-notes") || !event.ctrlKey || event.altKey || event.key.toLowerCase() !== "a") return;
+    const active = document.activeElement;
+    if (active?.matches("textarea, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])")) return;
+    event.preventDefault();
+    if ($("note-reader").open) {
+      const body = $("note-reader-body"), range = document.createRange();
+      body.focus(); range.selectNodeContents(body);
+      const selection = window.getSelection();
+      selection.removeAllRanges(); selection.addRange(range);
+    } else if (!$("note-delete-dialog").open) {
+      const content = $("note-editor").open ? $("note-text") : $("quick-note");
+      content.focus(); content.select();
+    }
+  });
+  // Modal backdrop events target the dialog itself; clicks inside its bounds stay interactive.
+  $("note-reader").addEventListener("click", (event) => {
+    if (event.target !== $("note-reader") || pending) return;
+    const bounds = $("note-reader").getBoundingClientRect();
+    if (event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom) return;
+    $("note-reader").close();
+    if (edgeMode) bridge?.postMessage({ command: "hide" });
   });
   document.addEventListener("pointerdown", (event) => {
     const settings = $("notes-edge-settings");

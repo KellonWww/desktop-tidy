@@ -25,6 +25,8 @@ namespace DesktopTidy.Core
         internal const int MaxNotes = 200;
         internal const int MaxText = 2000;
         private readonly string path;
+        internal string DataDirectory { get { return Path.GetDirectoryName(path); } }
+        internal string HistoryDirectory { get { return path + ".history"; } }
         private readonly DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(List<WorkspaceNote>));
         private List<WorkspaceNote> notes = new List<WorkspaceNote>();
         internal IEnumerable<WorkspaceNote> Notes { get { return notes.AsReadOnly(); } }
@@ -55,7 +57,7 @@ namespace DesktopTidy.Core
             return error is InvalidDataException || error is IOException || error is UnauthorizedAccessException || error is SecurityException ||
                 error is SerializationException || error is ArgumentException || error is InvalidOperationException;
         }
-        private static void Validate(List<WorkspaceNote> values)
+        internal static void Validate(List<WorkspaceNote> values)
         {
             if (values == null || values.Count > MaxNotes) throw new InvalidDataException("便签数量无效（最多 200 条）");
             var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -68,6 +70,24 @@ namespace DesktopTidy.Core
                     (!note.IsTodo && note.Completed) || note.Updated == null)
                     throw new InvalidDataException("便签内容无效");
             }
+        }
+        internal static List<WorkspaceNote> Parse(string content)
+        {
+            using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content)))
+            {
+                var values = (List<WorkspaceNote>)new DataContractJsonSerializer(typeof(List<WorkspaceNote>)).ReadObject(stream);
+                Validate(values); return values;
+            }
+        }
+        private void SaveHistory(bool deleting)
+        {
+            Directory.CreateDirectory(HistoryDirectory);
+            string daily = Path.Combine(HistoryDirectory, DateTime.UtcNow.ToString("yyyyMMdd") + "-daily.json");
+            if (!File.Exists(daily)) File.Copy(path, daily);
+            if (deleting) File.Copy(path, Path.Combine(HistoryDirectory, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff") + "-delete-" + Guid.NewGuid().ToString("N") + ".json"));
+            var files = new DirectoryInfo(HistoryDirectory).GetFiles("*.json");
+            Array.Sort(files, delegate(FileInfo a, FileInfo b) { return b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc); });
+            for (int i = 30; i < files.Length; i++) files[i].Delete();
         }
         internal WorkspaceNote Find(string id) { return notes.Find(note => note.Id == id); }
         internal bool Change(string command, string id, string title, string text, bool todo, out string error)
@@ -114,7 +134,12 @@ namespace DesktopTidy.Core
                 Validate(next); Directory.CreateDirectory(Path.GetDirectoryName(path));
                 using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
                 { serializer.WriteObject(stream, next); stream.Flush(true); }
-                if (File.Exists(path)) File.Replace(temporary, path, path + ".bak"); else File.Move(temporary, path);
+                if (File.Exists(path))
+                {
+                    SaveHistory(command == "deleteNote");
+                    File.Replace(temporary, path, path + ".bak");
+                }
+                else File.Move(temporary, path);
                 notes = next;
             }
             catch (Exception failure)

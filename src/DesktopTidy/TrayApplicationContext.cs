@@ -45,6 +45,11 @@ namespace DesktopTidy
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(opacityMenu);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("数据备份与恢复 / 诊断", null, delegate
+            {
+                using (var dialog = new RecoveryForm(GetWorkspace().Notes))
+                { dialog.ShowDialog(); if (dialog.Restored) RequestExit(); }
+            });
             menu.Items.Add("退出", null, delegate { RequestExit(); });
             tray = new NotifyIcon { Icon = AppBrand.Icon, Text = "桌面整理 · 分类工作区", ContextMenuStrip = menu, Visible = true };
             tray.DoubleClick += delegate { ShowWorkspace(); };

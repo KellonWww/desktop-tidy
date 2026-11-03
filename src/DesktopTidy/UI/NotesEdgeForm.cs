@@ -52,6 +52,12 @@ namespace DesktopTidy.UI
             web.PrepareBrowserSurface();
             frames = new NotesMotionClock(this, MotionFrame);
         }
+        // Clicking another window dismisses reading, but never interrupts editing or saving.
+        protected override void OnDeactivate(EventArgs e)
+        {
+            base.OnDeactivate(e);
+            if (Visible && !InteractionActive && !Dragging) Collapse();
+        }
         [DllImport("user32.dll")]
         private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
         protected override void CreateHandle()
@@ -330,7 +336,7 @@ namespace DesktopTidy.UI
         internal void Place(Rectangle bounds, NotesEdge side, string screen, bool paused)
         {
             this.side = side; workArea = Screen.FromRectangle(bounds).WorkingArea; Bounds = bounds;
-            button.Cursor = side == NotesEdge.Left || side == NotesEdge.Right ? Cursors.SizeNS : Cursors.SizeWE;
+            button.Cursor = Cursors.Default;
             Theme theme = Theme.Read(); BackColor = theme.Surface;
             button.SetAppearance(theme, side, paused);
             using (var outline = NotesDockButton.Outline(ClientSize, side))

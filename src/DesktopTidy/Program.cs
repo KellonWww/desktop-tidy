@@ -5,6 +5,7 @@ using System.Runtime.Serialization.Json;
 using System.Threading;
 using System.Windows.Forms;
 using DesktopTidy.Windows;
+using DesktopTidy.Core;
 
 namespace DesktopTidy
 {
@@ -41,6 +42,8 @@ namespace DesktopTidy
                     if (!created) return 3;
                     try
                     {
+                        if (new RecoveryStore(Diagnostics.DataDirectory).RecoverInterrupted())
+                            MessageBox.Show("检测到上次恢复未完成，已回滚到恢复前数据。", "桌面整理");
                         Application.EnableVisualStyles();
                         Application.SetCompatibleTextRenderingDefault(false);
                         using (var context = new TrayApplicationContext(tray, diagnostic)) Application.Run(context);
@@ -52,18 +55,6 @@ namespace DesktopTidy
             catch (Exception ex) { Report(ex); return 1; }
         }
 
-        private static void Report(Exception error)
-        {
-            if (error == null) return;
-            try
-            {
-                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DesktopTidy", "Prototype");
-                Directory.CreateDirectory(dir);
-                string path = Path.Combine(dir, "error.log");
-                if (File.Exists(path) && new FileInfo(path).Length > 262144) File.Delete(path);
-                File.AppendAllText(path, DateTimeOffset.Now.ToString("o") + " " + error + Environment.NewLine);
-            }
-            catch { Trace.WriteLine(error); }
-        }
+        internal static void Report(Exception error) { Diagnostics.Log(error); }
     }
 }

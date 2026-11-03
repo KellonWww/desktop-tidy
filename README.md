@@ -28,10 +28,10 @@
 
 ## 下载与运行
 
-1. 打开 [Releases](https://github.com/KellonWww/desktop-tidy/releases)，下载发布页提供的 `win-x64.zip`，不要下载 Source code。
-2. 将 ZIP **完整解压**到固定目录，例如 `D:/Apps/DesktopTidy`。
-3. 双击 `DesktopTidy.exe`；保留同目录的配置、DLL 和 `Web/` 等随包文件。
-4. 可为 EXE 创建快捷方式；运行不需要 Python 或开发工具。
+1. 打开 [Releases](https://github.com/KellonWww/desktop-tidy/releases)，以实际发布的资源为准，不要下载 Source code。
+2. 安装版运行 `DesktopTidy-Setup-<版本>-win-x64.exe`，默认仅当前用户安装，可选桌面快捷方式与开机启动。
+3. 便携版将 `win-x64.zip` **完整解压**到固定目录，双击 `DesktopTidy.exe`；保留配置、DLL 和 `Web/` 等随包文件。
+4. 运行不需要 Python 或开发工具；安装版缺失 WebView2 时需要联网补装，缺失 .NET 4.8 时会引导至官方下载页。
 
 | 项目 | 要求 / 说明 |
 |---|---|
@@ -40,7 +40,7 @@
 | 界面组件 | Microsoft Edge WebView2 Runtime |
 | 桌面 | Windows Explorer 原生桌面；其他桌面替代软件未验证 |
 | 权限 | 通常不需要管理员权限 |
-| 分发 | 免安装 ZIP，不含测试程序、用户配置或桌面数据 |
+| 分发 | 支持 Setup 安装包和免安装 ZIP，均不包含测试程序、用户配置或桌面数据 |
 | 签名 | 当前未签名；核对来源与 SHA-256，不要关闭系统安全防护 |
 
 [.NET Framework 4.8 官方下载](https://dotnet.microsoft.com/download/dotnet-framework/net48)
@@ -128,10 +128,10 @@ certutil -hashfile DesktopTidy-latest-win-x64.zip SHA256
 
 ## 更新、卸载与常见问题
 
-**更新：** 托盘右键退出旧版，再解压运行新版，不要覆盖正在运行的 EXE。个人数据在应用目录之外，更新前仍建议备份。
+**更新：** 托盘右键退出旧版，再运行新版安装包覆盖升级；便携版解压运行新版，不要覆盖正在运行的 EXE。安装器不强杀旧进程，个人数据不随升级覆盖，更新前仍建议备份。
 程序为单实例，旧版未退出时不会打开第二个实例。
 
-**卸载：** 完全退出后删除解压目录与快捷方式。若还需清除数据，手动删除 `%LOCALAPPDATA%/DesktopTidy`，会丢失便签、草稿、布局、备份和日志；注册表偏好另行保留。
+**卸载：** 安装版从 Windows「已安装的应用」卸载；便携版退出后删除解压目录和快捷方式。默认保留便签、草稿、布局、备份及偏好；仅在明确不要数据时手动删除 `%LOCALAPPDATA%/DesktopTidy`，注册表偏好另行处理。
 
 | 问题 | 处理 |
 |---|---|
@@ -162,6 +162,17 @@ python scripts/package-release.py
 - 本地统一入口：`build/notes-dpi-fixed/DesktopTidy.exe`，构建不会自动启动或执行测试。
 - 打包默认输出 `dist/DesktopTidy-latest-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
 - 用户包只包含主程序、离线网页、运行依赖、配置及说明，不包含诊断工具或个人数据。
+
+Windows 安装包（先安装官方 Inno Setup 6.3+，或用 `-IsccPath` 指定编译器）：
+
+```powershell
+.\scripts\package-installer.ps1 -Version 1.0.0
+```
+
+- 脚本重新编译当前应用，不编译或运行测试；默认沿用本次修复版目录 `build/notes-interaction-fix/`。
+- 输出 `dist/DesktopTidy-Setup-<版本>-win-x64.exe` 及独立 `.exe.sha256`；拒绝覆盖同名版本，不影响 ZIP 校验文件。
+- 微软 WebView2 引导程序缓存于 `build/installer-deps/`，每次打包校验 Authenticode 签名；缺编译器可用 `-PrepareOnly` 仅验证输入。
+- 安装目录默认 `%LOCALAPPDATA%/Programs/DesktopTidy`；安装包未签名，尚需安装、升级、卸载实机验收，不含自动更新。
 
 | 目录 | 内容 |
 |---|---|

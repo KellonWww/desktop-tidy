@@ -105,6 +105,7 @@ namespace DesktopTidy.UI
                 // renderer profile avoids shared-process initialization failures in either
                 // opening order; notes still come from the same owner.Notes store.
                 if (edgeHost != null) profile = Path.Combine(profile, "NotesEdge");
+                CoreWebView2Environment.GetAvailableBrowserVersionString();
                 var environment = await CoreWebView2Environment.CreateAsync(null, profile);
                 if (stopped || IsDisposed) return;
                 // Explorer callbacks can run in a different DPI context from this tool
@@ -133,6 +134,13 @@ namespace DesktopTidy.UI
                 core.NavigationCompleted += delegate(object sender, CoreWebView2NavigationCompletedEventArgs e)
                 { if (!e.IsSuccess) Fail("网页工作区加载失败，已恢复原生界面。"); };
                 core.WebMessageReceived += Receive;
+                try
+                {
+                    string bootstrap = DraftStore.Bootstrap(notes.DataDirectory, edgeHost != null);
+                    if (bootstrap.Length > 0) await core.AddScriptToExecuteOnDocumentCreatedAsync(bootstrap);
+                }
+                catch (Exception error) { Program.Report(error); owner.Notify("独立草稿备份读取失败，保留原文件并使用浏览器草稿。"); }
+                if (stopped || IsDisposed) return;
                 core.Navigate(Origin + "/index.html" + (edgeHost == null ? "" : "?notesEdge=1"));
             }
             catch (Exception error)
@@ -233,10 +241,18 @@ namespace DesktopTidy.UI
             try
             {
                 string raw = e.WebMessageAsJson;
-                if (raw.Length > 32768) return;
+                if (raw.Length > DraftStore.Maximum) return;
                 var data = json.Deserialize<Dictionary<string, object>>(raw);
                 if (data == null) return;
                 string command = ReadText(data, "command");
+                if (command == "saveDraft")
+                {
+                    bool saved = false;
+                    try { DraftStore.Save(notes.DataDirectory, edgeHost != null, ReadText(data, "name"), ReadText(data, "value")); saved = true; }
+                    catch (Exception error) { Program.Report(error); }
+                    browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "draftBackupResult", success = saved }));
+                    return;
+                }
                 if (command == "ready")
                 {
                     if (ready) return;

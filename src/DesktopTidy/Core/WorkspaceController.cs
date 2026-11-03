@@ -13,6 +13,7 @@ namespace DesktopTidy.Core
         private NotesStore notes;
         internal NotesStore Notes { get { return notes ?? (notes = new NotesStore()); } set { notes = value; } }
         internal string WebProfileDirectory { get; set; }
+        internal string LayoutDirectory { get; private set; }
         internal bool EdgeNotesEnabled { get; set; }
         internal Action ToggleEdgeNotes;
         internal int EdgeNotesDelay = 600;
@@ -58,7 +59,7 @@ namespace DesktopTidy.Core
         internal bool Visible { get { return showing && boxes.Count > 0; } }
         internal WorkspaceController(Font font, Action<string> notify, string directory)
         {
-            this.font = font; this.notify = notify; store = new LayoutStore(directory); layout = store.Load();
+            this.font = font; this.notify = notify; LayoutDirectory = directory; store = new LayoutStore(directory); layout = store.Load();
             EnsureGroups(); nextSortDescending = layout.OrderMode != CategoryOrderMode.CountDescending;
             itemChanges.Tick += ApplyItemChanges;
         }

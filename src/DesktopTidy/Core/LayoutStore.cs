@@ -87,7 +87,7 @@ namespace DesktopTidy.Core
         {
             return Math.Max(25, Math.Min(100, value));
         }
-        private static void Validate(LayoutState state)
+        internal static void Validate(LayoutState state)
         {
             if (state == null || state.Schema != 2 || state.OpacityPercent < 25 || state.OpacityPercent > 100 || state.Groups == null || state.Assignments == null || state.DeletedCategories == null || state.DeletedCategories.Count > Enum.GetValues(typeof(Category)).Length || state.Groups.Count > Enum.GetValues(typeof(Category)).Length || state.Assignments.Count > 3000) throw new InvalidDataException("布局格式不受支持");
             if (state.NoteFontSize < 12 || state.NoteFontSize > 32) throw new InvalidDataException("便签字号无效");
