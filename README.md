@@ -7,7 +7,7 @@
 - **四边磁吸**：拖动便签顶部，在上下左右停靠；收起后保留边缘把手。
 - **简约界面**：灰白 / 石墨双主题，跟随系统；低频设置按需展开。
 
-当前处于预览阶段。下文介绍仓库当前实现，已发布 ZIP 的功能以对应 Release 说明为准。
+当前正式版本为 **1.0.1**。本版清理重复统计、界面文案和装饰动效，保留搜索匹配、待办及风险提示；业务与本地数据格式不变。
 
 ## 界面预览
 
@@ -48,7 +48,7 @@
 下载后在命令提示符校验，并与发布页提供的 SHA-256 比对（将文件名替换为实际下载名称）：
 
 ```bat
-certutil -hashfile DesktopTidy-latest-win-x64.zip SHA256
+certutil -hashfile DesktopTidy-1.0.1-win-x64.zip SHA256
 ```
 
 ## 桌面整理
@@ -152,24 +152,24 @@ certutil -hashfile DesktopTidy-latest-win-x64.zip SHA256
 msbuild DesktopTidy.sln /p:Configuration=Release /p:Platform=x64
 ```
 
-或使用 Git Bash 与系统 Framework x64 编译器（警告视为错误）：
+或使用 PowerShell 与系统 Framework x64 编译器（警告视为错误）：
 
-```bash
-bash scripts/build.sh
+```powershell
+.\scripts\build.ps1
 python scripts/package-release.py
 ```
 
-- 本地统一入口：`build/notes-dpi-fixed/DesktopTidy.exe`，构建不会自动启动或执行测试。
-- 打包默认输出 `dist/DesktopTidy-latest-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
+- 本地统一入口：`build/release/DesktopTidy.exe`，构建不会自动启动或执行测试。
+- 打包默认输出 `dist/DesktopTidy-1.0.1-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
 - 用户包只包含主程序、离线网页、运行依赖、配置及说明，不包含诊断工具或个人数据。
 
 Windows 安装包（先安装官方 Inno Setup 6.3+，或用 `-IsccPath` 指定编译器）：
 
 ```powershell
-.\scripts\package-installer.ps1 -Version 1.0.0
+.\scripts\package-installer.ps1 -Version 1.0.1
 ```
 
-- 脚本重新编译当前应用，不编译或运行测试；默认沿用本次修复版目录 `build/notes-interaction-fix/`。
+- 脚本重新编译当前应用，不编译或运行测试；与便携版共用正式目录 `build/release/`。
 - 输出 `dist/DesktopTidy-Setup-<版本>-win-x64.exe` 及独立 `.exe.sha256`；拒绝覆盖同名版本，不影响 ZIP 校验文件。
 - 微软 WebView2 引导程序缓存于 `build/installer-deps/`，每次打包校验 Authenticode 签名；缺编译器可用 `-PrepareOnly` 仅验证输入。
 - 安装目录默认 `%LOCALAPPDATA%/Programs/DesktopTidy`；安装包未签名，尚需安装、升级、卸载实机验收，不含自动更新。

@@ -2,8 +2,8 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
-    [string]$Version = '1.0.0',
-    [string]$BuildDir = 'build\notes-interaction-fix',
+    [string]$Version = '1.0.1',
+    [string]$BuildDir = 'build\release',
     [string]$OutputDir = 'dist',
     [string]$IsccPath = '',
     [switch]$SkipBuild,
@@ -60,24 +60,7 @@ try {
                 throw 'Exit DesktopTidy from its tray menu before rebuilding this directory.'
             }
         }
-        & python (Join-Path $PSScriptRoot 'prepare-web.py') --output $build
-        if ($LASTEXITCODE -ne 0) { throw 'Offline web asset preparation failed.' }
-        $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-        if (-not (Test-Path -LiteralPath $csc)) { throw '.NET Framework x64 compiler not found.' }
-        # Include current source files, including data-recovery modules, without compiling test tools.
-        $sources = @(Get-ChildItem -LiteralPath (Join-Path $root 'src\DesktopTidy') -Recurse -Filter *.cs |
-            Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } | ForEach-Object { $_.FullName })
-        $arguments = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/warn:4', '/warnaserror+',
-            "/out:$build\DesktopTidy.exe", '/win32manifest:src/DesktopTidy/app.manifest',
-            '/win32icon:src/DesktopTidy/Assets/desktop-tidy.ico',
-            '/resource:src/DesktopTidy/Assets/desktop-tidy.ico,DesktopTidy.AppIcon',
-            '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll',
-            '/r:System.Runtime.Serialization.dll', '/r:System.Web.Extensions.dll',
-            '/r:build/web-deps/sdk/Microsoft.Web.WebView2.Core.dll',
-            '/r:build/web-deps/sdk/Microsoft.Web.WebView2.WinForms.dll')
-        & $csc @arguments @sources
-        if ($LASTEXITCODE -ne 0) { throw 'Application compilation failed.' }
-        Copy-Item -LiteralPath (Join-Path $root 'src\DesktopTidy\App.config') -Destination (Join-Path $build 'DesktopTidy.exe.config')
+        & (Join-Path $PSScriptRoot 'build.ps1') -BuildDir $build
     }
     $required = @('DesktopTidy.exe', 'DesktopTidy.exe.config', 'Microsoft.Web.WebView2.Core.dll',
         'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll', 'WebView2-LICENSE.txt',

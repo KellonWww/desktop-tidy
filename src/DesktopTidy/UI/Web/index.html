@@ -7,13 +7,12 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
-    <title>桌面整理 · 工作区</title>
+    <title>桌面整理工作区</title>
     <link rel="icon" href="tidy.svg" />
-    <link rel="stylesheet" href="workspace.css?v=quiet-ui-6" />
+    <link rel="stylesheet" href="workspace.css?v=quiet-ui-8" />
     <script defer src="vendor/gsap.min.js"></script>
-    <script defer src="vendor/ScrollTrigger.min.js"></script>
-    <script defer src="workspace.js?v=quiet-ui-6"></script>
-    <script defer src="notes.js?v=quiet-ui-6"></script>
+    <script defer src="workspace.js?v=quiet-ui-8"></script>
+    <script defer src="notes.js?v=quiet-ui-8"></script>
   </head>
   <body>
     <div class="app">
@@ -37,7 +36,7 @@
             maxlength="260"
             placeholder="搜索桌面"
             aria-label="搜索图标名称"
-          /><kbd>⌃ F</kbd></label
+          /><kbd>Ctrl F</kbd></label
         >
         <nav class="main-nav" aria-label="视图">
           <button class="nav-item active" id="all">
@@ -46,9 +45,9 @@
               <rect x="14" y="3" width="7" height="7" rx="1" />
               <rect x="3" y="14" width="7" height="7" rx="1" />
               <rect x="14" y="14" width="7" height="7" rx="1" /></svg
-            >全部图标<span id="total">0</span>
+            >全部图标
           </button>
-          <button class="nav-item" id="notes-nav" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v13l-5 5H5Z"/><path d="M14 21v-5h5M8 8h8M8 12h5"/></svg>便签<span id="notes-count">0</span></button>
+          <button class="nav-item" id="notes-nav" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v13l-5 5H5Z"/><path d="M14 21v-5h5M8 8h8M8 12h5"/></svg>便签</button>
         </nav>
         <div class="nav-label">分类</div>
         <nav id="categories" aria-label="跳转分类"></nav>
@@ -56,8 +55,7 @@
           <span aria-hidden="true">＋</span> 新建分类
         </button>
         <div class="sidebar-bottom">
-          <span class="local-dot" aria-hidden="true"></span
-          >本地工作区<button
+          <span>设置</span><button
             id="settings"
             aria-label="工作区设置"
             title="工作区设置"
@@ -73,14 +71,12 @@
       </aside>
       <main>
         <header class="topbar">
-          <span class="breadcrumb"
-            >Tidy <span>/</span>
-            <strong id="view-name">全部图标</strong></span
-          >
+          <span id="view-name" class="sr-only">全部图标</span>
+          <span id="updated" class="workspace-updated" title="上次读取桌面的时间">正在读取桌面…</span>
           <div class="topbar-actions">
             <button
               data-command="undo"
-              title="撤销上次修改 · Ctrl+Z"
+              title="撤销上次修改（Ctrl+Z）"
               aria-label="撤销上次修改"
             >
               ↶ <span>撤销</span></button
@@ -117,7 +113,7 @@
             <div>
 
               <h1 id="heading">桌面</h1>
-              <p id="summary">正在读取本地工作区…</p>
+              <p id="summary" role="status" hidden></p>
             </div>
             <button class="primary" data-command="refresh" id="refresh">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -126,10 +122,6 @@
             </button>
           </section>
           <div class="toolbar">
-            <div class="toolbar-left">
-              <span class="status-dot" aria-hidden="true"></span
-              ><span id="updated">本地工作区</span>
-            </div>
             <div class="tools">
               <button data-command="sort" id="sort">数量 ↓</button
               ><button data-command="collapseAll" id="collapse">全部折叠</button
@@ -142,7 +134,7 @@
           <div class="empty" id="empty" hidden>
             <span class="empty-symbol" aria-hidden="true">⌕</span>
             <h2>没有找到匹配的图标</h2>
-            <p>换个名称试试，或清空搜索查看全部。</p>
+            <p>换个名称试试。</p>
             <button id="clear-search">清空搜索</button>
           </div>
 

@@ -82,7 +82,7 @@ button {
     transform 0.18s ease;
 }
 button:active:not(:disabled) {
-  transform: scale(0.97);
+  filter: brightness(0.96);
 }
 :root,
 body,
@@ -266,12 +266,6 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.category-link .count {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
 }
 .new-category {
   border-top: 1px solid var(--line);
@@ -478,10 +472,6 @@ h1 > span {
 .category-card.drag-over .card-footer {
   color: var(--accent);
 }
-.category-card.drag-over .card-footer span:last-child {
-  opacity: 1;
-  font-weight: 600;
-}
 .category-card.reorder-over:before {
   content: "";
   position: absolute;
@@ -523,11 +513,6 @@ h1 > span {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.card-count {
-  font-size: 10px;
-  color: var(--muted);
-  margin-left: 0;
 }
 .card-actions {
   display: flex;
@@ -699,15 +684,11 @@ h1 > span {
   color: var(--muted);
 }
 .card-footer {
-  border-top: 1px solid var(--line);
-  padding: 9px 16px;
+  padding: 0 12px 8px;
   font-size: 9px;
   color: var(--muted);
   display: flex;
   justify-content: space-between;
-}
-.card-footer span:last-child {
-  opacity: 0.65;
 }
 .canvas-footer {
   display: flex;
@@ -967,7 +948,7 @@ dialog input[type="checkbox"]:disabled {
   .overview {
     padding: 25px 0 22px;
   }
-  .toolbar-left #updated {
+  .workspace-updated {
     max-width: 112px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1113,10 +1094,8 @@ dialog input[type="checkbox"]:disabled {
   align-items: center;
   gap: 8px;
 }
-.card-footer > span:nth-child(2) {
-  margin-left: auto;
-}
 .card-resize {
+  margin-left: auto;
   color: var(--muted);
   cursor: nwse-resize;
   font-size: 12px;
@@ -1141,7 +1120,6 @@ dialog input[type="checkbox"]:disabled {
 .sidebar-bottom { min-height: 50px; font-size: 11px; }
 .sidebar-bottom button { width: 32px; height: 32px; padding: 7px; border-radius: 8px; }
 .sidebar-bottom button:hover { background: var(--hover); }
-.local-dot, .status-dot { background: var(--muted); }
 .search-box { border-color: transparent; }
 #search { font-size: 12px; }
 .topbar { height: 54px; border-bottom-color: transparent; padding: 0 28px; }
@@ -1154,15 +1132,17 @@ h1 { font-size: 28px; letter-spacing: -.7px; font-weight: 600; }
 #summary { font-size: 12px; margin-top: 7px; }
 .primary { justify-content: center; min-height: 38px; padding: 9px 15px; font-size: 12px; font-weight: 600; border-radius: 8px; box-shadow: none; }
 .primary:hover { filter: brightness(1.04); }
-.toolbar { padding: 12px 0 16px; border-top: 0; }
-.tools button, .toolbar-left { font-size: 11px; }
+.toolbar { padding: 0 0 16px; border-top: 0; justify-content: flex-end; }
+.tools button { font-size: 11px; }
+.workspace-updated { color: var(--muted); font-size: 11px; }
+.show-notes .workspace-updated { display: none; }
+.show-notes .topbar-actions { margin-left: auto; }
 .category-grid { gap: 14px; }
 .category-card { box-shadow: none; }
 .category-card:hover { transform: none; box-shadow: none; border-color: var(--muted); }
 .category-mark { background: transparent; color: var(--muted); width: 22px; height: 24px; border-radius: 0; }
 .card-header { gap: 8px; padding: 14px 14px 12px; }
 .card-header h2 { font-size: 14px; }
-.card-count { font-size: 11px; font-variant-numeric: tabular-nums; }
 .card-actions button, .card-menu > summary { min-width: 28px; min-height: 28px; }
 .item { border-radius: 8px; }
 .item-name { font-size: 12px; line-height: 1.5; }
@@ -1187,10 +1167,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 #notes-view .overview { padding: 18px 0 22px; }
 #notes-summary { font-size: 12px; color: var(--muted); margin-top: 7px; }
 .notes-heading-actions { display: flex; align-items: center; gap: 10px; }
-.quick-note-form { padding: 14px 16px; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.quick-note-form:focus-within { border-color: var(--accent); }
+.quick-note-form { padding: 0 0 16px; margin: 0 0 20px; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+.quick-note-form:focus-within { border-bottom-color: var(--accent); }
 #quick-note { display: block; width: 100%; height: 42px; min-height: 42px; max-height: 300px; resize: vertical; color: var(--ink); background: transparent; border: 0; border-radius: 4px; padding: 4px 0; font: inherit; font-size: var(--note-font-size); line-height: 1.8; }
-#quick-note:focus-visible { outline: 0; }
+#quick-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .quick-note-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .quick-note-actions label { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; min-height: 36px; }
 .quick-note-actions input { width: 15px; height: 15px; accent-color: var(--accent); }
@@ -1213,6 +1193,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 #notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 14px; padding-bottom: 24px; }
 .note-card { display: flex; flex-direction: column; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: border-color .15s ease; }
 .note-card:hover { border-color: var(--muted); }
+.note-card-header:empty { display: none; }
 .note-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; min-height: 24px; }
 .note-kind { font-size: 11px; color: var(--muted); }
 .note-check { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; cursor: pointer; }
@@ -1302,7 +1283,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .edge-notes .topbar-actions { gap: 4px; flex-shrink: 0; }
 .edge-notes [data-command="hide"] { background: var(--rail); }
 .edge-notes #scroll { padding: 0 16px; }
-.edge-notes .quick-note-form { margin: 10px 0 16px; padding: 12px; }
+.edge-notes .quick-note-form { margin: 10px 0 16px; padding: 0 0 12px; }
 .edge-notes .notes-toolbar { flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .edge-notes .notes-filters { flex: 1; }
 .edge-notes .notes-filters button { padding: 8px 10px; }

@@ -203,8 +203,9 @@
   function render() {
     const completed = notes.filter((note) => note.IsTodo && note.Completed).length;
     const todos = notes.filter((note) => note.IsTodo).length;
-    $("notes-count").textContent = notes.length;
-    $("notes-summary").textContent = `${notes.length} 条，${todos - completed} 项待办`;
+    const pending = todos - completed;
+    $("notes-summary").textContent = pending ? `${pending} 项待办` : "";
+    $("notes-summary").hidden = pending === 0;
     if (loadError) $("notes-status").textContent = loadError;
     document.querySelectorAll("[data-note-filter]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.noteFilter === filter)));
     const visible = notes.filter((note) => (!query || `${note.Title}\n${note.Text}`.toLocaleLowerCase().includes(query)) && (filter === "all" ||
@@ -220,7 +221,13 @@
       card.hidden = filter === "all" && !query && !showCompleted && note.IsTodo && note.Completed;
       if (!card.hidden) displayed++;
       const header = node("div", "note-card-header");
-      header.append(node("span", "note-kind", (note.IsPinned ? "置顶 / " : "") + (note.IsTodo ? (note.Completed ? "已完成" : "待办") : "文本")));
+      // Plain notes need no type label; pinned and task states remain visible.
+      if (note.IsPinned || note.IsTodo) {
+        const labels = [];
+        if (note.IsPinned) labels.push("置顶");
+        if (note.IsTodo) labels.push(note.Completed ? "已完成" : "待办");
+        header.append(node("span", "note-kind", labels.join(" / ")));
+      }
       if (note.IsTodo) {
         const label = node("label", "note-check"), check = node("input");
         check.type = "checkbox"; check.checked = note.Completed; check.dataset.noteAction = "toggle";

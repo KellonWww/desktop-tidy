@@ -10,8 +10,7 @@
   let state = null,
     selected = "",
     dragged = null,
-    assignItem = null,
-    first = true;
+    assignItem = null;
   let searchPending = null;
   const folderSvg =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/></svg>';
@@ -267,7 +266,6 @@
     const title = element("h2");
     title.id = `title-${group.id}`;
     card.setAttribute("aria-labelledby", title.id);
-    const count = element("span", "card-count");
     const actions = element("div", "card-actions");
     const collapse = action("−", "collapse", { category: String(group.id) });
     const details = element("details", "card-menu");
@@ -281,7 +279,7 @@
     );
     details.append(summary, menu);
     actions.append(collapse, details);
-    header.append(mark, title, count, actions);
+    header.append(mark, title, actions);
     const contents = element("div", "card-items");
     const footer = element("div", "card-footer");
     const resize = element("button", "card-resize", "◢");
@@ -289,12 +287,11 @@
     resize.title = "拖动调整分类框大小，松手后自动对齐";
     resize.setAttribute("aria-label", "调整分类框大小");
     resize.addEventListener("pointerdown", (event) => beginCardResize(event, card));
-    footer.append(element("span"), element("span"), resize);
+    footer.append(resize);
     card.append(header, contents, footer);
     dropTarget(card, group.id);
     card._parts = {
       title,
-      count,
       collapse,
       contents,
       footer,
@@ -320,7 +317,6 @@
         return a.name.localeCompare(b.name, "zh-CN");
       });
     part.title.textContent = group.title;
-    part.count.textContent = String(source.length);
     const shouldCollapse = group.collapsed && !query;
     card._group = group;
     card.classList.toggle("collapsed", shouldCollapse);
@@ -339,9 +335,6 @@
       "aria-expanded",
       String(!group.collapsed || Boolean(query)),
     );
-    part.footer.firstChild.textContent = query
-      ? `${source.length} 个匹配`
-      : `${group.items.length} 个图标`;
     const signature = JSON.stringify(
       source.map((item) => [item.id, item.name, item.icon, item.section]),
     );
@@ -389,7 +382,6 @@
       $("search").value = state.search;
       searchPending = null;
     }
-    $("total").textContent = state.total;
     $("heading").replaceChildren(
       document.createTextNode(query ? "搜索结果" : "桌面"),
     );
@@ -402,9 +394,8 @@
         ).length,
       0,
     );
-    $("summary").textContent = query
-      ? `${matches} 个匹配，共 ${state.total} 个图标`
-      : `${state.groups.length} 个分类，${state.total} 个图标`;
+    $("summary").textContent = query ? `${matches} 个匹配` : "";
+    $("summary").hidden = !query;
     $("updated").textContent = state.updated;
     $("sort").textContent = state.nextDescending ? "数量 ↓" : "数量 ↑";
     $("sort").title = "按全部图标数量排序；一次性操作，可撤销";
@@ -436,12 +427,6 @@
     const feedback = state.feedback === "本地工作区" ? "" : (state.feedback || "");
     if ($("feedback").textContent !== feedback) {
       $("feedback").textContent = feedback;
-      if (animate())
-        gsap.fromTo(
-          $("feedback"),
-          { opacity: 0.35, y: 3 },
-          { opacity: 1, y: 0, duration: 0.25, overwrite: true },
-        );
     }
     const scrollTop = $("scroll").scrollTop;
     const focused = document.activeElement;
@@ -451,17 +436,12 @@
     const existing = new Set(state.groups.map((group) => group.id));
     nodes.forEach((node, id) => {
       if (!existing.has(id)) {
-        if (window.ScrollTrigger)
-          ScrollTrigger.getAll()
-            .filter((trigger) => trigger.trigger === node)
-            .forEach((trigger) => trigger.kill());
         node.remove();
         nodes.delete(id);
       }
     });
-    const added = [];
     const sideSignature = JSON.stringify(
-      state.groups.map((group) => [group.id, group.title, group.items.length]),
+      state.groups.map((group) => [group.id, group.title]),
     );
     if ($("categories").dataset.signature !== sideSignature) {
       $("categories").dataset.signature = sideSignature;
@@ -473,7 +453,6 @@
         link.append(
           element("span", "dot"),
           element("span", "name", group.title),
-          element("span", "count", group.items.length),
         );
         link.title = group.title;
         dropTarget(link, group.id);
@@ -509,7 +488,6 @@
       if (!card) {
         card = makeCard(group);
         nodes.set(group.id, card);
-        added.push(card);
       }
       const wasHidden = card.hidden;
       updateCard(card, group, query);
@@ -529,7 +507,7 @@
       ? "没有找到匹配的图标"
       : "暂时没有可显示的分类";
     $("empty").querySelector("p").textContent = query
-      ? "换个名称试试，或清空搜索查看全部。"
+      ? "换个名称试试。"
       : "刷新桌面，或在设置中关闭“隐藏空分类”。";
     $("clear-search").hidden = !query;
     $("scroll").scrollTop = scrollTop;
@@ -540,20 +518,6 @@
     )
       focused.focus({ preventScroll: true });
     if (animate()) {
-      for (const card of revealed) {
-        gsap.fromTo(
-          card,
-          { opacity: 0.7, y: 8, scale: 0.99 },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.22,
-            ease: "power2.out",
-            overwrite: true,
-          },
-        );
-      }
       const revealedSet = new Set(revealed);
       for (const [id, card] of nodes) {
         const old = oldRects.get(id);
@@ -566,34 +530,7 @@
             { x: 0, y: 0, duration: 0.36, ease: "power2.out", overwrite: true },
           );
       }
-      for (const card of added.filter((node) => !node.hidden)) {
-        gsap.fromTo(
-          card,
-          { opacity: 0.7, y: 14 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.4,
-            scrollTrigger: window.ScrollTrigger
-              ? {
-                  trigger: card,
-                  scroller: $("scroll"),
-                  start: "top 98%",
-                  once: true,
-                }
-              : undefined,
-          },
-        );
-      }
-      if (first)
-        gsap.fromTo(
-          ".overview",
-          { y: 10, opacity: 0.6 },
-          { y: 0, opacity: 1, duration: 0.45 },
-        );
-      if (window.ScrollTrigger) ScrollTrigger.refresh();
     }
-    first = false;
   }
   document.querySelectorAll("[data-command]").forEach((button) =>
     button.addEventListener("click", () => {
@@ -685,12 +622,11 @@
     clearDrag();
   });
   document.addEventListener("dragend", clearDrag);
-  if (window.gsap && window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
   motion.addEventListener("change", () => {
     if (motion.matches && window.gsap) {
-      window.ScrollTrigger?.getAll().forEach((trigger) => trigger.kill(true));
-      gsap.killTweensOf(".category-card,.overview,#feedback");
-      gsap.set(".category-card,.overview,#feedback", { clearProps: "all" });
+      // Clear only motion styles; grid spans must survive preference changes.
+      gsap.killTweensOf(".category-card");
+      gsap.set(".category-card", { clearProps: "transform" });
     }
   });
   if (window.ResizeObserver) new ResizeObserver(refreshCardSizes).observe($("grid"));
