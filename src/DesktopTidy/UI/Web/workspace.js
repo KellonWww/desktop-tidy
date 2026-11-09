@@ -54,6 +54,29 @@
       y: Math.round((pointer ? event.clientY : rect.top + 16) * scale),
     });
   }
+  // Blank areas represent the real desktop; controls and notes retain their own interactions.
+  function isDesktopBackground(target) {
+    return !document.body.classList.contains("show-notes") &&
+      !target.closest("button,input,textarea,select,a,summary,details,[contenteditable],.card-resize,#notes-view");
+  }
+  function showDesktopMenu(event) {
+    const rect = event.target.getBoundingClientRect();
+    const pointer = event.type === "contextmenu" && event.button === 2;
+    const scale = window.devicePixelRatio || 1;
+    event.preventDefault();
+    event.stopPropagation();
+    send("desktopMenu", {
+      x: Math.round((pointer ? event.clientX : rect.left + 16) * scale),
+      y: Math.round((pointer ? event.clientY : rect.top + 16) * scale),
+    });
+  }
+  $("scroll").addEventListener("contextmenu", (event) => {
+    if (isDesktopBackground(event.target)) showDesktopMenu(event);
+  });
+  $("scroll").addEventListener("keydown", (event) => {
+    if ((event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) &&
+        isDesktopBackground(event.target)) showDesktopMenu(event);
+  });
   function makeItem(item) {
     const button = element("button", "item");
     button.dataset.item = item.id;

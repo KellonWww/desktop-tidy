@@ -57,6 +57,42 @@ namespace DesktopTidy.Windows
             }
         }
 
+        // Desktop categories are virtual: background Shell commands target the real desktop.
+        internal static void ShowBackground(Point position, Action changed)
+        {
+            using (var window = new MenuWindow(null, position))
+            {
+                object menuObject = null; IntPtr popup = IntPtr.Zero;
+                try
+                {
+                    // Give the local folder menu a valid owner before creating Shell extensions.
+                    menuObject = DesktopShellView.BackgroundMenu(window.Handle, ContextMenuId);
+                    window.BindMenu(menuObject);
+                    var menu = (IContextMenu)menuObject;
+                    popup = CreatePopupMenu();
+                    if (popup == IntPtr.Zero) throw new System.ComponentModel.Win32Exception();
+                    uint flags = (Control.ModifierKeys & Keys.Shift) != 0 ? 0x100u : 0; // CMF_EXTENDEDVERBS
+                    int result = menu.QueryContextMenu(popup, 0, FirstCommand, LastCommand, flags);
+                    // Entries can exist even on failure; never mistake a partial menu for success.
+                    if (result < 0) throw new COMException("桌面菜单构建失败（QueryContextMenu，HRESULT 0x" + result.ToString("X8") + "）。", result);
+                    window.Show(); window.Activate();
+                    uint command = TrackPopupMenuEx(popup, ReturnCommand | RightButton, position.X, position.Y, window.Handle, IntPtr.Zero);
+                    if (command < FirstCommand || command > LastCommand) return;
+                    // Dynamic New entries need ordinal invocation; many have no canonical verb string.
+                    var invoke = new InvokeInfo { Size = Marshal.SizeOf(typeof(InvokeInfo)), Mask = 0x100,
+                        Window = window.Handle, Verb = new IntPtr(command - FirstCommand), Show = 1 };
+                    menu.InvokeCommand(ref invoke);
+                    changed();
+                }
+                finally
+                {
+                    window.BindMenu(null);
+                    if (popup != IntPtr.Zero) DestroyMenu(popup);
+                    Release(menuObject);
+                }
+            }
+        }
+
         internal static bool Recycle(string path, IntPtr owner)
         { return Operate(path, null, owner); }
         internal static bool Rename(string path, string name, IntPtr owner)
@@ -86,14 +122,17 @@ namespace DesktopTidy.Windows
         // A top-level owner keeps the menu active even though the workspace is a WorkerW child.
         private sealed class MenuWindow : Form
         {
-            private readonly IContextMenu2 menu2;
-            private readonly IContextMenu3 menu3;
+            private IContextMenu2 menu2;
+            private IContextMenu3 menu3;
             internal MenuWindow(object menu, Point position)
             {
-                menu2 = menu as IContextMenu2; menu3 = menu as IContextMenu3;
+                BindMenu(menu);
                 FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; Opacity = 0;
                 StartPosition = FormStartPosition.Manual; Bounds = new Rectangle(position, new Size(1, 1));
             }
+            // Background menus need this window's HWND before their COM object can be created.
+            internal void BindMenu(object menu)
+            { menu2 = menu as IContextMenu2; menu3 = menu as IContextMenu3; }
             protected override void WndProc(ref Message message)
             {
                 // Forward owner-drawn entries and dynamic submenus to installed Shell extensions.

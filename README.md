@@ -7,7 +7,7 @@
 - **四边磁吸**：拖动便签顶部，在上下左右停靠；收起后保留边缘把手。
 - **简约界面**：灰白 / 石墨双主题，跟随系统；低频设置按需展开。
 
-当前正式版本为 **1.0.1**。本版清理重复统计、界面文案和装饰动效，保留搜索匹配、待办及风险提示；业务与本地数据格式不变。
+当前构建版本为 **1.0.2**，线上安装包以 Releases 实际发布为准。本版增强便签标题对比度，修复整理区空白处右键及隐藏桌面图标后的菜单交互；本地数据格式不变。
 
 ## 界面预览
 
@@ -48,7 +48,7 @@
 下载后在命令提示符校验，并与发布页提供的 SHA-256 比对（将文件名替换为实际下载名称）：
 
 ```bat
-certutil -hashfile DesktopTidy-1.0.1-win-x64.zip SHA256
+certutil -hashfile DesktopTidy-1.0.2-win-x64.zip SHA256
 ```
 
 ## 桌面整理
@@ -58,6 +58,7 @@ certutil -hashfile DesktopTidy-1.0.1-win-x64.zip SHA256
 | 操作 | 使用方式 |
 |---|---|
 | 打开文件 | 双击图标；右键使用 Windows 原生菜单 |
+| 空白处右键 | 整理区空白处使用系统桌面文件夹菜单，可新建文件夹、快捷方式及系统支持的文件类型；新内容保存在真实桌面并自动归类 |
 | 自动分类 | 按应用名、目标、程序信息和网址识别，未知应用进入待分类 |
 | 手动归类 | 将图标拖入分类，刷新保留归属；重新自动分类会清除手动归属，可撤销 |
 | 调整布局 | 拖动分类标题排序，拖动边角调整大小；支持折叠、数量排序与名称排序 |
@@ -68,6 +69,7 @@ certutil -hashfile DesktopTidy-1.0.1-win-x64.zip SHA256
 | 收起 / 恢复 | 右上角收起到托盘；托盘右键 → 显示分类窗口 |
 | 完全退出 | 托盘右键 → 退出；退出时请求显示原生桌面图标并确认结果 |
 
+隐藏原生图标使用系统 Shell 图标显隐标志，不再由应用强行隐藏桌面图标窗口；桌面空白处仍可右键。分类是虚拟分组，不是实际文件夹。网页整理区支持聚焦后按 Shift+F10 / 菜单键打开空白处菜单，文件项右键仍操作该文件。
 应用识别使用本地规则，不联网、不上传图标、不启动目标程序。文件操作后自动刷新，未同步时可手动点「刷新」。
 
 ## 便签
@@ -103,7 +105,7 @@ certutil -hashfile DesktopTidy-1.0.1-win-x64.zip SHA256
 展开不抢焦点，点击后可输入。混合 DPI 多屏、全屏游戏和长期驻留表现仍需人工验收。
 
 便签支持 **12–32 px 字号调整**：列表工具栏、编辑器和阅读窗口均可切换，主工作区与边缘便签同步，重启后保留；旧布局自动使用 16 px。
-
+便签标题使用独立高对比底块、侧边色条与粗体：浅色蓝底深蓝字、深色棕底亮金字；列表、阅读和编辑界面保持一致，已完成标题保留对比度并显示删除线。
 便签卡片、放大阅读和编辑区使用交替行底色，并自动着色常见代码 / SQL 关键字、字符串、数字、注释、链接与行内代码；内容仍按纯文本保存和复制，不执行 HTML。浅色为白 / 浅灰，深色自动适配。边缘便签整窗及磁吸把手同步全局不透明度（含撤销与重新打开）。
 
 ## 数据与安全
@@ -145,7 +147,6 @@ certutil -hashfile DesktopTidy-1.0.1-win-x64.zip SHA256
 ## 开发与构建
 
 **C# 5 · WinForms · WebView2 · .NET Framework 4.8 · Release x64**
-
 使用 Visual Studio / MSBuild 与 .NET Framework 4.8 Targeting Pack：
 
 ```bat
@@ -160,13 +161,13 @@ python scripts/package-release.py
 ```
 
 - 本地统一入口：`build/release/DesktopTidy.exe`，构建不会自动启动或执行测试。
-- 打包默认输出 `dist/DesktopTidy-1.0.1-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
+- 打包默认输出 `dist/DesktopTidy-1.0.2-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
 - 用户包只包含主程序、离线网页、运行依赖、配置及说明，不包含诊断工具或个人数据。
 
 Windows 安装包（先安装官方 Inno Setup 6.3+，或用 `-IsccPath` 指定编译器）：
 
 ```powershell
-.\scripts\package-installer.ps1 -Version 1.0.1
+.\scripts\package-installer.ps1 -Version 1.0.2
 ```
 
 - 脚本重新编译当前应用，不编译或运行测试；与便携版共用正式目录 `build/release/`。
@@ -183,7 +184,7 @@ Windows 安装包（先安装官方 Inno Setup 6.3+，或用 `-IsccPath` 指定�
 
 ### 验证
 
-本轮已通过严格编译、4 套隔离浏览器回归与 **86 项原生 WebView2 检查**，覆盖便签操作、草稿、冲突、阅读编辑、防误触、四边磁吸、位置记忆和窗口恢复；不代表完整桌面兼容性验收。
+此前已通过严格编译、4 套隔离浏览器回归与 **86 项原生 WebView2 检查**，覆盖便签操作、草稿、冲突、阅读编辑、防误触、四边磁吸、位置记忆和窗口恢复；不代表完整桌面兼容性验收。
 
 ```bash
 build/notes-dpi-fixed/NotesChecks.exe
@@ -195,6 +196,5 @@ python tools/notes-product-checks.py
 python tools/notes-appearance-checks.py
 ```
 
-浏览器检查需要 Python Playwright 与 Chromium，使用模拟桥接；`--build-dir` 或 `BUILD_DIR` 可指定构建目录。
-原生检查需要 WebView2 Runtime，使用临时数据并短暂显示测试窗口；`--desktop-startup` 会临时挂载测试工作区。两者不修改真实便签或桌面分类。
+浏览器检查需要 Python Playwright 与 Chromium，使用模拟桥接；`--build-dir` 或 `BUILD_DIR` 可指定构建目录。原生检查需要 WebView2 Runtime，使用临时数据并短暂显示测试窗口；`--desktop-startup` 会临时挂载测试工作区。两者不修改真实便签或桌面分类。
 真实剪贴板、多屏混合 DPI、Explorer 重启、全屏游戏和长期驻留仍需人工验证。

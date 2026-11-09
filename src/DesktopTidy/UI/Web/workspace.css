@@ -8,6 +8,9 @@
   --accent: #365fd3;
   --accent-soft: #eaf0ff;
   --on-accent: #ffffff;
+  --note-title-ink: #163b75;
+  --note-title-fill: #e5edff;
+  --note-title-edge: #3563cf;
   --danger: #b84642;
   --hover: #e9edf4;
   --shadow: 0 8px 24px #252a3412;
@@ -24,6 +27,9 @@
   --accent: #9bb9ff;
   --accent-soft: #303e5b;
   --on-accent: #172b53;
+  --note-title-ink: #fff0b3;
+  --note-title-fill: #463a1c;
+  --note-title-edge: #edc85d;
   --danger: #ffaaa5;
   --hover: #30343d;
   --shadow: 0 8px 24px #10121726;
@@ -1203,8 +1209,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .note-title { font-size: calc(var(--note-font-size) + 2px); font-weight: 600; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 6px; }
 .note-body { font-size: var(--note-font-size); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .note-preview .note-body { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-height: 3.6em; overflow: hidden; }
-.note-preview .note-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
-.note-card.completed .note-title, .note-card.completed .note-body { text-decoration: line-through; color: var(--muted); }
+.note-preview .note-title { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.note-card.completed .note-title { text-decoration: line-through; }
+.note-card.completed .note-body { text-decoration: line-through; color: var(--muted); }
 .note-card.pinned .note-kind { color: var(--accent); }
 .note-actions { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 18px; }
 .note-action { min-height: 36px; padding: 8px 10px; color: var(--muted); border-radius: 7px; font-size: 12px; }
@@ -1381,3 +1388,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .note-content-heading { display: flex; align-items: center; gap: 16px; margin: 18px 0 8px; }
 .note-content-heading > .note-label { flex: 1; margin: 0; }
 .note-reader-options { display: flex; align-items: center; gap: 16px; }
+
+/* A distinct title band stays readable above striped content, in the drawer and in dialogs. */
+.note-title, #note-reader-title, #note-title {
+  color: var(--note-title-ink);
+  background: var(--note-title-fill);
+  border-inline-start: 4px solid var(--note-title-edge);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-weight: 700;
+  min-width: 0;
+}
+.note-title { margin-bottom: 10px; }
+#note-title::placeholder { color: var(--note-title-ink); opacity: .75; }
+@media (forced-colors: active) {
+  .note-title, #note-reader-title, #note-title {
+    color: CanvasText; background: Canvas; border: 1px solid CanvasText;
+    border-inline-start-width: 4px;
+  }
+}

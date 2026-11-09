@@ -25,7 +25,7 @@ namespace DesktopTidy.Windows
         private EventWaitHandle stop;
         private Process guardian;
         internal bool OwnsChange { get { return hidden != IntPtr.Zero; } }
-        internal bool? Visible { get { uint process; IntPtr target = FindIcons(out process); return target == IntPtr.Zero ? (bool?)null : IsWindowVisible(target); } }
+        internal bool? Visible { get { uint process; IntPtr target = FindIcons(out process); return target == IntPtr.Zero ? (bool?)null : ReadVisible(target); } }
         internal bool Toggle(out string error)
         {
             bool? visible = Visible;
@@ -70,8 +70,10 @@ namespace DesktopTidy.Windows
             }
             uint process; IntPtr target = FindIcons(out process);
             if (target == IntPtr.Zero) { error = "未找到 Explorer 桌面图标，未修改系统。"; return false; }
-            if (visible && IsWindowVisible(target)) return true;
-            originalVisible = IsWindowVisible(target);
+            bool? currentVisible = ReadVisible(target);
+            if (!currentVisible.HasValue) { error = "无法读取 Explorer 图标状态，未修改系统。"; return false; }
+            if (visible && currentVisible.Value) return true;
+            originalVisible = currentVisible.Value;
             string token = @"Local\DesktopTidy.IconGuard." + Guid.NewGuid().ToString("N");
             try
             {
@@ -93,13 +95,44 @@ namespace DesktopTidy.Windows
                 Restore(); error = "未修改桌面图标：" + ex.Message; return false;
             }
         }
+        // Reading Shell flags can fail transiently while Explorer rebuilds; never report a guessed state.
+        private static bool? ReadVisible(IntPtr window)
+        {
+            try { return IsWindowVisible(window) && DesktopShellView.IconsVisible(); }
+            catch (Exception error)
+            {
+                if (!ShellUnavailable(error)) throw;
+                Debug.WriteLine("Desktop icon state unavailable: " + error); return null;
+            }
+        }
+        private static bool ShellUnavailable(Exception error)
+        { return error is COMException || error is InvalidCastException || error is InvalidOperationException; }
+
+        // Let Explorer hide icon content through its supported view flag, preserving background commands.
         private static bool SetVisible(IntPtr window, uint process, bool visible)
         {
             if (!Valid(window, process)) return false;
-            if (IsWindowVisible(window) == visible) return true;
-            if (!ShowWindowAsync(window, visible ? 5 : 0)) return false;
-            for (int i = 0; i < 25; i++) { if (!Valid(window, process)) return false; if (IsWindowVisible(window) == visible) return true; Thread.Sleep(20); }
-            return false;
+            try
+            {
+                if (!DesktopShellView.SetIconsVisible(visible)) return false;
+                if (!Valid(window, process)) return false;
+                // Explorer owns the hidden-state HWND behavior; do not force-show it after NOICONS.
+                if (!visible) return true;
+                // Showing also repairs a leftover SW_HIDE state from older application versions.
+                if (!IsWindowVisible(window)) ShowWindowAsync(window, 5);
+                for (int i = 0; i < 25; i++)
+                {
+                    if (!Valid(window, process)) return false;
+                    if (IsWindowVisible(window)) return DesktopShellView.IconsVisible() == visible;
+                    Thread.Sleep(20);
+                }
+                return false;
+            }
+            catch (Exception error)
+            {
+                if (!ShellUnavailable(error)) throw;
+                DesktopTidy.Core.Diagnostics.Log(error); return false;
+            }
         }
         internal bool Restore()
         {

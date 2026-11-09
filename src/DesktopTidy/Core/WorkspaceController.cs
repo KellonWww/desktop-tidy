@@ -105,6 +105,8 @@ namespace DesktopTidy.Core
             container.Sync();
             if (!container.ShowDesktop()) { showing = false; desktopVisibility.Restore(); Notify("无法挂载桌面层，工作区未显示；不会回退为遮挡应用的浮窗。"); return; }
             showing = true;
+            WatchDirectoryChanges(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+            WatchDirectoryChanges(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory));
             bool hideOnThisShow = !startupHidingApplied && layout.HideIconsOnStartup; startupHidingApplied = true;
             icons.Load(items, delegate
             {
@@ -261,8 +263,12 @@ namespace DesktopTidy.Core
         private readonly Timer itemChanges = new Timer { Interval = 500 };
         private void WatchItemChanges(WorkspaceItem item)
         {
-            string directory = Path.GetDirectoryName(item.Path);
-            if (itemWatchers.ContainsKey(directory)) return;
+            WatchDirectoryChanges(Path.GetDirectoryName(item.Path));
+        }
+        // Background New/Paste also needs monitoring when the desktop was initially empty.
+        private void WatchDirectoryChanges(string directory)
+        {
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory) || itemWatchers.ContainsKey(directory)) return;
             FileSystemWatcher watcher = null;
             try
             {
@@ -310,6 +316,24 @@ namespace DesktopTidy.Core
             if (disposed || item == null || !items.Contains(item)) return false;
             if (File.Exists(item.Path) || Directory.Exists(item.Path)) return true;
             Notify("文件已不存在，请刷新工作区。"); RequestRefresh(); return false;
+        }
+        // Categories are virtual: background commands operate on the real desktop, then reclassify.
+        internal void ShowDesktopMenu(Point screenPosition)
+        {
+            if (disposed || itemOperation) return;
+            itemOperation = true;
+            try
+            {
+                WatchDirectoryChanges(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
+                WatchDirectoryChanges(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory));
+                ShellItemMenu.ShowBackground(screenPosition, delegate { RequestRefresh(); });
+            }
+            catch (Exception error)
+            {
+                if (!ExpectedItemError(error) && !(error is InvalidOperationException) && !(error is InvalidCastException)) throw;
+                Diagnostics.Log(error); Notify("桌面右键菜单不可用：" + error.Message);
+            }
+            finally { itemOperation = false; }
         }
         internal void ShowItemMenu(WorkspaceItem item, Point screenPosition)
         {

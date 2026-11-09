@@ -86,6 +86,7 @@ namespace DesktopTidy.UI
         private readonly RoundedButton countSortButton, collapseButton, refreshButton, clearSearchButton, organizeButton, settingsButton, desktopIconsButton;
         private readonly Label feedback = new Label { Dock = DockStyle.Bottom, Height = 40, Padding = new Padding(20, 9, 20, 8), AutoEllipsis = true, AccessibleName = "工作区操作反馈" };
         private ContextMenuStrip settingsMenu, organizeMenu;
+        private readonly ContextMenuStrip desktopMenu;
         private readonly ToolTip sidebarTips = new ToolTip { ShowAlways = true };
         private readonly Label searchSummary = new Label { Width = 164, Height = 36, Margin = new Padding(0, 0, 0, 2), Tag = "muted", AutoEllipsis = true };
         private bool desktopRequested, recovering, moving, resizing;
@@ -115,8 +116,20 @@ namespace DesktopTidy.UI
             Bounds = desktopBounds;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             viewport = new WorkspaceViewport(canvas) { Dock = DockStyle.Fill };
+            desktopMenu = new WorkspaceMenu { Font = font, AccessibleName = "桌面右键菜单" };
+            desktopMenu.Items.Add("桌面操作");
+            desktopMenu.Opening += delegate(object sender, System.ComponentModel.CancelEventArgs e)
+            {
+                e.Cancel = true;
+                // Search-result boxes already route their own right-click; do not open an inherited menu too.
+                if (desktopMenu.SourceControl is ClassificationBox) return;
+                // Defer native modal menus until the WinForms context-menu notification returns.
+                Point position = Cursor.Position;
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowDesktopMenu(position); });
+            };
+            canvas.ContextMenuStrip = desktopMenu; viewport.ContextMenuStrip = desktopMenu;
             sidebarViewport = new WorkspaceViewport(sidebar) { Dock = DockStyle.Left, Width = 226 };
-            heading = new WorkspaceHeading(owner);
+            heading = new WorkspaceHeading(owner) { ContextMenuStrip = desktopMenu };
             var content = new Panel { Dock = DockStyle.Fill }; nativeContent = content;
             content.Controls.Add(viewport); content.Controls.Add(heading);
             Controls.Add(content); Controls.Add(feedback); Controls.Add(sidebarViewport);
@@ -321,7 +334,7 @@ namespace DesktopTidy.UI
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { if (settingsMenu != null) settingsMenu.Dispose(); if (organizeMenu != null) organizeMenu.Dispose(); webGesture.Dispose(); sidebarTips.Dispose(); desktopRequested = false; hostWatch.Stop(); hostWatch.Dispose(); titleFont.Dispose(); detailFont.Dispose(); }
+            if (disposing) { desktopMenu.Dispose(); if (settingsMenu != null) settingsMenu.Dispose(); if (organizeMenu != null) organizeMenu.Dispose(); webGesture.Dispose(); sidebarTips.Dispose(); desktopRequested = false; hostWatch.Stop(); hostWatch.Dispose(); titleFont.Dispose(); detailFont.Dispose(); }
             base.Dispose(disposing);
         }
         internal void WebReady()

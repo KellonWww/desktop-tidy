@@ -26,9 +26,6 @@ namespace DesktopTidy.Windows
     // 只读 PoC：有意不声明 SelectAndPositionItems，不提供任何布局写入口。
     internal static class DesktopReader
     {
-        private static readonly Guid ShellWindowsClass = new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39");
-        private static readonly Guid TopLevelBrowser = new Guid("4C96BE40-915C-11CF-99D3-00AA004AE837");
-        private static readonly Guid ShellBrowserId = new Guid("000214E2-0000-0000-C000-000000000046");
         private static readonly Guid PersistFolderId = new Guid("1AC3D9F0-175C-11D1-95BE-00609797EA4F");
         internal static DesktopReadResult Read()
         {
@@ -37,21 +34,7 @@ namespace DesktopTidy.Windows
             IntPtr root = IntPtr.Zero;
             try
             {
-                object windowsObject = Activator.CreateInstance(Type.GetTypeFromCLSID(ShellWindowsClass, true));
-                owned.Add(windowsObject);
-                var windows = (IShellWindows)windowsObject;
-                object location = 0, locationRoot = null, desktop;
-                int hwnd;
-                Check(windows.FindWindowSW(ref location, ref locationRoot, 8, out hwnd, 1, out desktop));
-                if (desktop == null) throw new InvalidOperationException("未找到 Explorer 桌面 Shell 视图。");
-                owned.Add(desktop);
-                var provider = (IComServiceProvider)desktop;
-                Guid service = TopLevelBrowser, browserId = ShellBrowserId;
-                object browserObject;
-                Check(provider.QueryService(ref service, ref browserId, out browserObject));
-                owned.Add(browserObject);
-                object viewObject;
-                Check(((IShellBrowser)browserObject).QueryActiveShellView(out viewObject));
+                object viewObject = DesktopShellView.Open();
                 owned.Add(viewObject);
                 var view = (IFolderView)viewObject;
                 Guid folderId = PersistFolderId;
@@ -122,42 +105,6 @@ namespace DesktopTidy.Windows
         [DllImport("shell32.dll")] private static extern int SHGetNameFromIDList(IntPtr pidl, uint kind, out IntPtr text);
         [StructLayout(LayoutKind.Sequential)] private struct Point { public int X; public int Y; }
 
-        [ComImport, Guid("85CB6900-4D95-11CF-960C-0080C7F4EE85"), InterfaceType(ComInterfaceType.InterfaceIsDual)]
-        private interface IShellWindows
-        {
-            [PreserveSig] int GetCount(out int count);
-            [PreserveSig] int Item([MarshalAs(UnmanagedType.Struct)] object index, [MarshalAs(UnmanagedType.IDispatch)] out object item);
-            [PreserveSig] int NewEnum([MarshalAs(UnmanagedType.IUnknown)] out object enumerator);
-            [PreserveSig] int Register([MarshalAs(UnmanagedType.IDispatch)] object item, int hwnd, int windowClass, out int cookie);
-            [PreserveSig] int RegisterPending(int threadId, ref object location, ref object locationRoot, int windowClass, out int cookie);
-            [PreserveSig] int Revoke(int cookie);
-            [PreserveSig] int OnNavigate(int cookie, ref object location);
-            [PreserveSig] int OnActivated(int cookie, [MarshalAs(UnmanagedType.VariantBool)] bool active);
-            [PreserveSig] int FindWindowSW([MarshalAs(UnmanagedType.Struct)] ref object location, [MarshalAs(UnmanagedType.Struct)] ref object locationRoot,
-                int windowClass, out int hwnd, int options, [MarshalAs(UnmanagedType.IDispatch)] out object item);
-        }
-        [ComImport, Guid("6D5140C1-7436-11CE-8034-00AA006009FA"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IComServiceProvider
-        {
-            [PreserveSig] int QueryService(ref Guid service, ref Guid interfaceId, [MarshalAs(UnmanagedType.IUnknown)] out object result);
-        }
-        [ComImport, Guid("000214E2-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IShellBrowser
-        {
-            [PreserveSig] int GetWindow(out IntPtr hwnd);
-            [PreserveSig] int ContextSensitiveHelp(int enter);
-            [PreserveSig] int InsertMenusSB(IntPtr menu, IntPtr widths);
-            [PreserveSig] int SetMenuSB(IntPtr menu, IntPtr reserved, IntPtr hwnd);
-            [PreserveSig] int RemoveMenusSB(IntPtr menu);
-            [PreserveSig] int SetStatusTextSB(IntPtr text);
-            [PreserveSig] int EnableModelessSB(int enable);
-            [PreserveSig] int TranslateAcceleratorSB(IntPtr message, ushort id);
-            [PreserveSig] int BrowseObject(IntPtr pidl, uint flags);
-            [PreserveSig] int GetViewStateStream(uint mode, out IntPtr stream);
-            [PreserveSig] int GetControlWindow(uint id, out IntPtr hwnd);
-            [PreserveSig] int SendControlMsg(uint id, uint message, IntPtr wParam, IntPtr lParam, out IntPtr result);
-            [PreserveSig] int QueryActiveShellView([MarshalAs(UnmanagedType.IUnknown)] out object view);
-        }
         [ComImport, Guid("CDE725B0-CCC9-4519-917E-325D72FAB4CE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         private interface IFolderView
         {

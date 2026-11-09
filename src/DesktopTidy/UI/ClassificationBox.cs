@@ -216,14 +216,21 @@ namespace DesktopTidy.UI
             return point.Y >= 0 && point.Y < HeaderHeight &&
                 (point.X > Width - 42 || (!IsSearchResults && point.X >= Width - 144 && point.X < Width - 90));
         }
+        // Keep category management on the header; body whitespace uses desktop Shell commands.
         private void OpenContextMenu(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            int index = Hit(PointToClient(Cursor.Position));
+            Point local = PointToClient(Cursor.Position);
+            int index = Hit(local);
             if (index >= 0)
             {
                 e.Cancel = true; selected = index; Invalidate();
                 WorkspaceItem item = items[index]; Point position = Cursor.Position;
                 BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowItemMenu(item, position); });
+            }
+            else if (local.Y >= HeaderHeight)
+            {
+                e.Cancel = true; Point position = Cursor.Position;
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowDesktopMenu(position); });
             }
         }
         protected override void OnMouseDown(MouseEventArgs e)
@@ -285,7 +292,12 @@ namespace DesktopTidy.UI
         {
             base.OnMouseUp(e); EndChange();
             int index = Hit(e.Location);
-            if (IsSearchResults && e.Button == MouseButtons.Right && index >= 0)
+            if (IsSearchResults && e.Button == MouseButtons.Right && index < 0)
+            {
+                Point position = PointToScreen(e.Location);
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowDesktopMenu(position); });
+            }
+            else if (IsSearchResults && e.Button == MouseButtons.Right && index >= 0)
             {
                 selected = index; Invalidate();
                 WorkspaceItem item = items[index]; Point position = PointToScreen(e.Location);
@@ -321,6 +333,12 @@ namespace DesktopTidy.UI
                 e.Handled = true; e.SuppressKeyPress = true;
                 WorkspaceItem item = items[selected]; Point position = PointToScreen(Cell(selected).Location);
                 BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowItemMenu(item, position); });
+            }
+            else if (e.KeyCode == Keys.Apps || (e.Shift && e.KeyCode == Keys.F10))
+            {
+                e.Handled = true; e.SuppressKeyPress = true;
+                Point position = PointToScreen(new Point(16, HeaderHeight + 16));
+                BeginInvoke((Action)delegate { if (!IsDisposed) owner.ShowDesktopMenu(position); });
             }
             else if (e.KeyCode == Keys.Enter && selected >= 0) { Open(items[selected]); e.Handled = true; }
             else if (e.KeyCode == Keys.Escape)

@@ -353,6 +353,13 @@ namespace DesktopTidy.UI
             if (command == "opacity") { int value; if (int.TryParse(ReadText(data, "value"), out value)) owner.CommitOpacity(value); return; }
             if (command == "native") { Fail("已切换原生工作区；下次打开重新尝试网页界面。"); return; }
             if (command == "move" || command == "resize") { host.BeginWebGesture(command == "resize"); return; }
+            if (command == "desktopMenu")
+            {
+                int x = Math.Max(0, Math.Min(browser.ClientSize.Width - 1, ReadInt(data, "x")));
+                int y = Math.Max(0, Math.Min(browser.ClientSize.Height - 1, ReadInt(data, "y")));
+                owner.ShowDesktopMenu(browser.PointToScreen(new Point(x, y)));
+                return;
+            }
             WorkspaceItem item;
             if (!tokenItems.TryGetValue(ReadText(data, "item"), out item) || !owner.WebItems.Contains(item)) item = null;
             if (command == "itemMenu")
