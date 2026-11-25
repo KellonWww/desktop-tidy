@@ -49,6 +49,9 @@ def main():
         page.keyboard.press("Escape")
         expect(page.locator("#note-editor")).to_be_visible()
         page.evaluate("mock.release(); mock.hold = false")
+        expect(page.locator("#note-draft-status")).to_have_text("已保存")
+        expect(page.locator("#note-editor")).to_be_visible()
+        page.locator("#note-cancel").click()
         expect(page.locator("#note-editor")).not_to_be_visible()
         page.wait_for_function("() => mock.commands.filter(m => m.command === 'notesInteraction').at(-1).value === 'false'")
         page.locator(".note-check input").check()
@@ -82,6 +85,7 @@ def main():
         page.locator("#note-text").fill("把经常使用的内容放在这里，随时阅读、一键复制。")
         page.locator("#note-save").click()
         expect(page.locator(".note-card")).to_have_count(2)
+        page.locator("#note-cancel").click()
         for width, height, theme in [(440, 760, "light"), (440, 760, "dark"), (360, 500, "compact")]:
             page.set_viewport_size({"width": width, "height": height})
             if theme == "dark": page.locator("#theme-toggle").click()

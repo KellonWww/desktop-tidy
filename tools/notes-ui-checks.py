@@ -27,6 +27,7 @@ MOCK = r"""
       if (message.command === 'pauseEdgeNotes') { initial.edgeNotesPaused = !initial.edgeNotesPaused; emit(initial); return; }
       if (!['saveNote', 'deleteNote', 'toggleTodo', 'togglePin', 'copyDraft', 'copyNote'].includes(message.command)) return;
       const respond = () => {
+        let savedNoteId = "";
         if (mock.rejectNext) { mock.rejectNext = false; emit({type:'notesResult', request:message.request, success:false, error:'模拟磁盘写入失败', notes:initial.notes}); return; }
         const found = initial.notes.find(note => note.Id === message.id);
         if (found && message.command !== 'copyNote' && found.Updated !== message.revision) {
@@ -35,13 +36,14 @@ MOCK = r"""
         if (message.command === 'saveNote') {
           const note = { Id: found?.Id || crypto.randomUUID().replaceAll('-', ''), Title:message.title,
             Text:message.text, IsTodo:message.todo === 'true', IsPinned:Boolean(found?.IsPinned), Completed:message.todo === 'true' && Boolean(found?.Completed), Updated:new Date().toISOString() };
+          savedNoteId = note.Id;
           if (found) initial.notes[initial.notes.indexOf(found)] = note; else initial.notes.push(note);
         }
         if (message.command === 'toggleTodo') { found.Completed = !found.Completed; found.Updated = new Date().toISOString(); }
         if (message.command === 'togglePin') { found.IsPinned = !found.IsPinned; found.Updated = new Date().toISOString(); }
         if (message.command === 'deleteNote') initial.notes = initial.notes.filter(note => note.Id !== message.id);
         localStorage.setItem('test-notes', JSON.stringify(initial.notes));
-        emit({type:'notesResult', request:message.request, success:true, notes:initial.notes}); emit(initial);
+        emit({type:'notesResult', request:message.request, success:true, savedNoteId, notes:initial.notes}); emit(initial);
       };
       if (mock.hold) mock.release = respond; else setTimeout(respond, 20);
     }
@@ -80,6 +82,9 @@ def main():
         page.locator('#note-title').fill(title)
         page.locator('#note-text').fill(text)
         page.locator('#note-save').click()
+        expect(page.locator('#note-draft-status')).to_have_text('已保存')
+        expect(page.locator('#note-editor')).to_be_visible()
+        page.locator('#note-cancel').click()
         expect(page.locator('#note-editor')).not_to_be_visible()
         expect(page.locator('.note-title')).to_have_text(title)
         expect(page.locator('.note-body')).to_have_text(text)
@@ -92,6 +97,7 @@ def main():
         page.locator('#note-todo').check()
         page.locator('#note-save').click()
         expect(page.locator('.note-card')).to_have_count(2)
+        page.locator('#note-cancel').click()
         page.locator('.note-check input').check()
         expect(page.locator('.note-card.completed')).to_have_count(1)
         page.locator('[data-note-filter="pending"]').click()
@@ -117,6 +123,9 @@ def main():
         page.evaluate('mock.emit(mock.state)')
         expect(page.locator('#note-text')).to_have_value('保存失败时也要保留这份草稿。')
         page.evaluate('mock.hold = false; mock.release()')
+        expect(page.locator('#note-draft-status')).to_have_text('已保存')
+        expect(page.locator('#note-editor')).to_be_visible()
+        page.locator('#note-cancel').click()
         expect(page.locator('#note-editor')).not_to_be_visible()
         todo.get_by_role('button', name='删除便签', exact=True).click()
         page.locator('#note-delete-cancel').click()

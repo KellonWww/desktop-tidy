@@ -2,9 +2,12 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const bridge = window.chrome?.webview;
+  const noteWindowId = new URLSearchParams(location.search).get("noteWindow") || "";
+  const windowMode = /^[a-f0-9]{32}$/i.test(noteWindowId);
+  let closingAfterSave = false, detachAfterSave = false, windowOpened = false;
   const edgeMode = new URLSearchParams(location.search).get("notesEdge") === "1";
   // Separate surface keys avoid one window overwriting another window's unsaved work.
-  const storagePrefix = "desktop-tidy.notes." + (edgeMode ? "edge" : "workspace");
+  const storagePrefix = "desktop-tidy.notes." + (windowMode ? "note-" + noteWindowId : edgeMode ? "edge" : "workspace");
   let reading = "";
   let editingRevision = "", deletingRevision = "", lastInteraction = null;
   let notes = [], filter = "all", editing = "", deleting = "", pending = null, loadError = "";
@@ -65,7 +68,7 @@
     backdrop.scrollLeft = input.scrollLeft;
   }
   function keepNoteWindowVisible(dialog) {
-    if (!dialog.open) return;
+    if (!dialog.open || windowMode) return;
     const gap = 8, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
     const rect = dialog.getBoundingClientRect();
     const width = Math.min(rect.width, Math.max(1, viewportWidth - gap * 2));
@@ -118,7 +121,7 @@
     header.addEventListener("pointerdown", (event) => begin(event, false));
     resize.addEventListener("pointerdown", (event) => begin(event, true));
   }
-  [$("note-reader"), $("note-editor")].forEach(wireNoteWindow);
+  if (!windowMode) [$("note-reader"), $("note-editor")].forEach(wireNoteWindow);
   window.addEventListener("resize", () => [$("note-reader"), $("note-editor")].forEach(keepNoteWindowVisible));
 
   function applyFontSize(size) {
@@ -279,7 +282,7 @@
   }
   // Reading must not pin the drawer open; editing and in-flight operations remain protected.
   function syncInteraction() {
-    const active = Boolean(pending || $("note-editor").open || $("note-delete-dialog").open || (document.activeElement?.closest("#quick-note-form") && $("quick-note").value.trim()));
+    const active = Boolean(pending || ($("note-editor").open && !$("note-editor").classList.contains("note-reading")) || $("note-delete-dialog").open || (document.activeElement?.closest("#quick-note-form") && $("quick-note").value.trim()));
     if (edgeMode && active !== lastInteraction) { lastInteraction = active; bridge?.postMessage({ command: "notesInteraction", value: String(active) }); }
   }
   function setBusy() {
@@ -287,11 +290,15 @@
     document.querySelectorAll("#notes-view button:not([data-note-filter]), #notes-grid input, #quick-note-form textarea, #quick-note-form input, #note-form input, #note-form textarea, #note-form button, #note-delete-dialog button").forEach((item) => { item.disabled = Boolean(pending) || Boolean(loadError); });
     for (const id of ["note-close", "note-cancel", "note-discard", "note-delete-cancel", "note-copy-draft"]) $(id).disabled = Boolean(pending);
     $("note-save").textContent = pending?.command === "saveNote" ? "正在保存…" : "保存";
+    $("note-start-edit").disabled = Boolean(pending) || Boolean(loadError) || Boolean(editing && !notes.some((note) => note.Id === editing));
   }
   function request(command, extra, source = "editor") {
     if (pending || (loadError && command !== "copyDraft")) return;
     if (!bridge) { $("notes-status").textContent = "便签需要在桌面应用中使用。"; return; }
-    pending = { command, request: crypto.randomUUID(), source };
+    // Disabling an input during save drops browser focus; remember the caret for Ctrl+S.
+    const active = document.activeElement;
+    const focus = active?.matches("#note-title, #note-text") ? { input: active, start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection } : null;
+    pending = { command, request: crypto.randomUUID(), source, focus, saveAsCopy: command === "saveNote" && source === "editor" && Boolean(editing) && extra.id === "" };
     $("note-error").textContent = ""; $("notes-status").textContent = "正在处理…"; setBusy();
     bridge.postMessage({ command, request: pending.request, ...extra });
   }
@@ -301,12 +308,37 @@
     highlight($("note-reader-body"), note?.Text || (note ? "这条便签只有标题。" : "这条便签已在另一处删除。"));
     $("note-reader-edit").disabled = !note || Boolean(pending) || Boolean(loadError);
   }
-  function openReader(note) {
-    if (pending || loadError || $("note-reader").open) return;
-    reading = note.Id; refreshReader(); $("note-reader").showModal(); keepNoteWindowVisible($("note-reader")); syncInteraction();
-    $("note-reader-body").scrollTop = 0; $("note-reader-body").focus();
+  // Reading and editing share one dialog, preserving its size and position on entry.
+  function openReader(note) { openEditor(note, undefined, true); }
+  function isEditorDirty() { return JSON.stringify(editorValue()) !== editorBaseline; }
+  function refreshInlinePreview() {
+    $("note-inline-title").textContent = $("note-title").value || "无标题便签";
+    highlight($("note-inline-body"), $("note-text").value || "点击这里写点内容…");
   }
-  function openEditor(note, restoredKey) {
+  function enterInlineEdit(field = "note-text", offset = null) {
+    if (pending || loadError || (editing && !notes.some((note) => note.Id === editing))) return;
+    $("note-editor").classList.remove("note-reading"); $("note-inline-preview").hidden = true;
+    $("note-editor-title").textContent = editing ? "编辑便签" : "新建便签";
+    const input = $(field); input.focus();
+    if (offset !== null) input.setSelectionRange(offset, offset);
+    syncEditorHighlight(); syncInteraction();
+  }
+  // A drag selection remains selectable text; only an actual click switches to editing.
+  for (const [id, field] of [["note-inline-title", "note-title"], ["note-inline-body", "note-text"]]) {
+    const target = $(id); let down = null;
+    target.addEventListener("pointerdown", (event) => { down = { x: event.clientX, y: event.clientY, scroll: target.scrollTop }; });
+    target.addEventListener("click", (event) => {
+      if (!down || Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4 || down.scroll !== target.scrollTop || window.getSelection()?.toString()) return;
+      let offset = 0;
+      const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+      if (caret && target.contains(caret.startContainer)) {
+        const range = document.createRange(); range.selectNodeContents(target); range.setEnd(caret.startContainer, caret.startOffset); offset = range.toString().length;
+      }
+      enterInlineEdit(field, Math.min(offset, $(field).value.length));
+    });
+    target.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); enterInlineEdit(field); } });
+  }
+  function openEditor(note, restoredKey, readingOnly = false) {
     if (pending || loadError || $("note-editor").open) return;
     editing = restoredKey === undefined ? note?.Id || "" : restoredKey === "new" ? "" : restoredKey;
     editingRevision = note?.Updated || "";
@@ -320,7 +352,12 @@
     $("note-length").textContent = `${$("note-text").value.length} / 2000`;
     $("note-error").textContent = ""; $("note-draft-status").textContent = draft ? "已恢复本机草稿，尚未保存便签。" : "";
     $("note-conflict").hidden = true;
-    $("note-editor").showModal(); keepNoteWindowVisible($("note-editor")); syncEditorHighlight(); syncInteraction(); $("note-text").focus();
+    const read = readingOnly && !draft;
+    if (read) $("note-editor-title").textContent = "便签全文";
+    $("note-editor").classList.toggle("note-reading", read); $("note-inline-preview").hidden = !read;
+    $("note-detach").disabled = !editing;
+    refreshInlinePreview(); setBusy();
+    $("note-editor").showModal(); keepNoteWindowVisible($("note-editor")); syncEditorHighlight(); syncInteraction(); (read ? $("note-inline-body") : $("note-text")).focus();
     if (draft && editing && (!note || note.Updated !== editingRevision)) showConflict();
   }
   function showConflict() {
@@ -328,10 +365,30 @@
     $("note-conflict").hidden = false;
     $("note-latest").textContent = latest ? [latest.Title, latest.Text].filter(Boolean).join("\n\n") : "这条便签已被删除。你的草稿仍可复制或另存。";
   }
-  function closeEditor() { if (!pending && persistEditor()) $("note-editor").close(); }
+  function requestWindowClose(dock = false) {
+    if (!windowOpened) { bridge?.postMessage({ command: "finishNoteWindowClose" }); return; }
+    if (pending) { bridge?.postMessage({ command: "cancelNoteWindowClose" }); return; }
+    if (!persistEditor()) { bridge?.postMessage({ command: "cancelNoteWindowClose" }); return; }
+    bridge?.postMessage({ command: "requestNoteWindowClose", dirty: String(isEditorDirty()), dock: String(dock) });
+  }
+  function closeEditor() {
+    if (windowMode) requestWindowClose();
+    else if (!pending && persistEditor()) $("note-editor").close();
+  }
   function submitEditor(asCopy = false) {
     const title = $("note-title").value.trim(), text = $("note-text").value.trim();
-    if (!title && !text) { $("note-error").textContent = "标题和内容至少写一项。"; $("note-text").focus(); return; }
+    if (!title && !text) {
+      $("note-error").textContent = "标题和内容至少写一项。"; enterInlineEdit();
+      detachAfterSave = false;
+      if (closingAfterSave) { closingAfterSave = false; bridge?.postMessage({ command: "cancelNoteWindowClose" }); }
+      return;
+    }
+    if (pending) return;
+    if (!asCopy && editing && !isEditorDirty()) {
+      $("note-draft-status").textContent = "已保存";
+      if (closingAfterSave) bridge?.postMessage({ command: "finishNoteWindowClose" });
+      return;
+    }
     persistEditor();
     request("saveNote", { id: asCopy ? "" : editing, revision: asCopy ? "" : editingRevision, title, text, todo: String($("note-todo").checked) });
   }
@@ -375,10 +432,22 @@
   $("search").addEventListener("focus", () => showNotes(false));
   for (const id of ["new-note", "notes-empty-create"]) $(id).addEventListener("click", () => openEditor(null));
   for (const id of ["note-close", "note-cancel"]) $(id).addEventListener("click", closeEditor);
-  $("note-discard").addEventListener("click", () => { if (clearEditorDraft()) $("note-editor").close(); });
+  $("note-discard").addEventListener("click", () => {
+    if (windowMode) { requestWindowClose(); return; }
+    if (clearEditorDraft()) $("note-editor").close();
+  });
   $("note-copy-draft").addEventListener("click", () => request("copyDraft", { text: [$("note-title").value, $("note-text").value].filter(Boolean).join("\n\n") }));
   $("note-save-copy").addEventListener("click", () => submitEditor(true));
   $("note-reader-close").addEventListener("click", () => $("note-reader").close());
+  $("note-start-edit").addEventListener("click", () => enterInlineEdit());
+  $("note-detach").addEventListener("click", () => {
+    if (!editing || pending) return;
+    // Never transfer a stale draft silently: save it first through the normal revision check.
+    if (isEditorDirty()) { detachAfterSave = true; submitEditor(); }
+    else { bridge?.postMessage({ command: "openNoteWindow", id: editing }); $("note-editor").close(); }
+  });
+  $("note-window-topmost").addEventListener("click", () => bridge?.postMessage({ command: "toggleNoteWindowTopMost" }));
+  $("note-window-dock").addEventListener("click", () => requestWindowClose(true));
   $("note-reader-edit").addEventListener("click", () => {
     const note = notes.find((item) => item.Id === reading);
     if (!note || pending || loadError) return;
@@ -386,21 +455,38 @@
   });
   $("note-delete-cancel").addEventListener("click", () => $("note-delete-dialog").close());
   $("note-delete-confirm").addEventListener("click", () => request("deleteNote", { id: deleting, revision: deletingRevision }));
-  $("note-editor").addEventListener("cancel", (event) => { if (pending || !persistEditor()) event.preventDefault(); });
+  $("note-editor").addEventListener("cancel", (event) => { event.preventDefault(); closeEditor(); });
   $("note-delete-dialog").addEventListener("cancel", (event) => { if (pending) event.preventDefault(); });
   $("note-text").addEventListener("input", syncEditorHighlight);
   $("note-text").addEventListener("scroll", syncEditorHighlight);
   new ResizeObserver(syncEditorHighlight).observe($("note-text"));
   for (const id of ["note-title", "note-text", "note-todo"]) $(id).addEventListener("input", () => { $("note-length").textContent = `${$("note-text").value.length} / 2000`; persistEditor(); });
-  $("note-form").addEventListener("submit", (event) => { event.preventDefault(); submitEditor(); });
+  $("note-form").addEventListener("submit", (event) => { event.preventDefault(); if (!$("note-editor").classList.contains("note-reading")) submitEditor(); });
   $("note-form").addEventListener("keydown", (event) => {
-    if (event.ctrlKey && event.key === "Enter" && !event.isComposing) { event.preventDefault(); submitEditor(); }
+    if (event.ctrlKey && !event.altKey && (event.key.toLowerCase() === "s" || event.key === "Enter")) {
+      event.preventDefault();
+      if (!event.isComposing && event.keyCode !== 229 && !$("note-editor").classList.contains("note-reading")) submitEditor();
+    }
   });
   document.querySelectorAll("[data-note-filter]").forEach((item) => item.addEventListener("click", () => { filter = item.dataset.noteFilter; render(); }));
   bridge?.addEventListener("message", (event) => {
     const data = event.data;
+    if (data?.type === "noteWindowClosing") { requestWindowClose(); return; }
+    if (data?.type === "noteWindowSaveAndClose") { closingAfterSave = true; submitEditor(); return; }
+    if (data?.type === "noteWindowDiscardAndClose") {
+      if (clearEditorDraft()) bridge?.postMessage({ command: "finishNoteWindowClose" });
+      else bridge?.postMessage({ command: "cancelNoteWindowClose" });
+      return;
+    }
+    if (["noteWindowTopMostOn", "noteWindowTopMostOff"].includes(data?.type)) {
+      const on = data.type === "noteWindowTopMostOn";
+      $("note-window-topmost").setAttribute("aria-pressed", String(on)); $("note-window-topmost").textContent = on ? "取消窗口置顶" : "窗口置顶"; return;
+    }
     if (data?.type === "draftBackupResult") {
-      if (!data.success) $("notes-status").textContent = "独立草稿备份失败，浏览器草稿仍保留；请复制重要内容。";
+      if (!data.success) {
+        const warning = "独立草稿备份失败，浏览器草稿仍保留；请复制重要内容。";
+        $("notes-status").textContent = warning; $("note-draft-status").textContent = warning;
+      }
       return;
     }
     if (["state", "notesState", "notesOpened"].includes(data?.type)) {
@@ -428,7 +514,28 @@
         $("edge-pause").setAttribute("aria-pressed", String(Boolean(data.edgeNotesPaused)));
       }
       if (changed || data.type === "notesOpened") render();
-      if ($("note-editor").open && editing && notes.find((note) => note.Id === editing)?.Updated !== editingRevision) showConflict();
+      if (windowMode && !windowOpened) {
+        const note = notes.find((item) => item.Id === noteWindowId);
+        if (note) { windowOpened = true; openEditor(note, undefined, true); }
+        else $("notes-status").textContent = "便签已删除，请关闭窗口。";
+      }
+      if ($("note-editor").open && editing && !pending) {
+        const latest = notes.find((note) => note.Id === editing);
+        if (latest?.Updated !== editingRevision) {
+          if (latest && !isEditorDirty()) {
+            $("note-title").value = latest.Title; $("note-text").value = latest.Text; $("note-todo").checked = latest.IsTodo;
+            editingRevision = latest.Updated; editorBaseline = JSON.stringify(editorValue());
+            $("note-length").textContent = `${latest.Text.length} / 2000`; refreshInlinePreview(); syncEditorHighlight();
+            $("note-conflict").hidden = true;
+          } else if (!latest && !isEditorDirty() && $("note-editor").classList.contains("note-reading")) {
+            // A deleted clean reader must not offer editing of a stale note. Dirty drafts remain recoverable.
+            $("note-editor-title").textContent = "便签已删除";
+            $("note-inline-title").textContent = "便签已删除";
+            $("note-inline-body").textContent = "这条便签已在其他窗口删除，请关闭此窗口。";
+            $("note-start-edit").disabled = true;
+          } else showConflict();
+        }
+      }
       if (document.body.classList.contains("show-notes")) $("view-name").textContent = "便签";
     }
     if (data?.type !== "notesResult" || data.request !== pending?.request) return;
@@ -437,11 +544,36 @@
     $("notes-status").textContent = message; $("note-error").textContent = data.success ? "" : message;
     if (data.success && operation.command === "saveNote") {
       if (operation.source === "quick") { $("quick-note").value = ""; persistQuick(); }
-      else { clearEditorDraft(); $("note-editor").close(); }
+      else {
+        const cleared = clearEditorDraft();
+        editing = data.savedNoteId || editing;
+        const saved = notes.find((note) => note.Id === editing);
+        if (saved) {
+          editingRevision = saved.Updated;
+          // Preserve the caret and text exactly as typed; use the new revision as the baseline.
+          editorBaseline = JSON.stringify(editorValue()); $("note-conflict").hidden = true;
+          $("note-detach").disabled = false; if (cleared) $("note-draft-status").textContent = "已保存";
+        }
+        if (windowMode && operation.saveAsCopy) {
+          bridge?.postMessage({ command: "openNoteWindow", id: editing }); bridge?.postMessage({ command: "finishNoteWindowClose" });
+          closingAfterSave = false;
+        }
+        else if (closingAfterSave) { closingAfterSave = false; bridge?.postMessage({ command: "finishNoteWindowClose" }); }
+        else if (detachAfterSave) { detachAfterSave = false; bridge?.postMessage({ command: "openNoteWindow", id: editing }); $("note-editor").close(); }
+      }
+    }
+    if (!data.success) {
+      detachAfterSave = false;
+      if (closingAfterSave) { closingAfterSave = false; bridge?.postMessage({ command: "cancelNoteWindowClose" }); }
     }
     if (!data.success && operation.source === "editor" && editing && notes.find((note) => note.Id === editing)?.Updated !== editingRevision) showConflict();
     if (operation.command === "deleteNote") $("note-delete-dialog").close();
     render();
+    // Do not steal focus if the user moved to another control while the request was running.
+    if (operation.focus && $("note-editor").open && document.activeElement === document.body) {
+      const { input, start, end, direction } = operation.focus;
+      input.focus({ preventScroll: true }); input.setSelectionRange(start, end, direction);
+    }
     if (data.success && operation.command === "saveNote" && operation.source === "quick") $("quick-note").focus();
   });
   // Only select note content; toolbar focus must not fall back to browser-wide selection.
@@ -450,8 +582,8 @@
     const active = document.activeElement;
     if (active?.matches("textarea, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])")) return;
     event.preventDefault();
-    if ($("note-reader").open) {
-      const body = $("note-reader-body"), range = document.createRange();
+    if ($("note-reader").open || ($("note-editor").open && $("note-editor").classList.contains("note-reading"))) {
+      const body = $("note-reader").open ? $("note-reader-body") : $("note-inline-body"), range = document.createRange();
       body.focus(); range.selectNodeContents(body);
       const selection = window.getSelection();
       selection.removeAllRanges(); selection.addRange(range);
@@ -478,6 +610,11 @@
       event.preventDefault();
     }
   });
+  if (windowMode) {
+    document.body.classList.add("note-window", "show-notes");
+    $("note-cancel").title = "关闭窗口；未保存时询问保存、放弃或取消";
+    $("note-detach").hidden = true; $("note-window-topmost").hidden = false; $("note-window-dock").hidden = false;
+  }
   if (edgeMode) {
     document.body.classList.add("edge-notes"); showNotes(true);
     const heading = node("div", "notes-drawer-heading"), headingRow = node("div", "notes-drawer-title-row");

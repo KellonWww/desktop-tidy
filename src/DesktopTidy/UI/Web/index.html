@@ -185,14 +185,16 @@
     </dialog>
     <dialog id="note-editor" aria-labelledby="note-editor-title">
       <form id="note-form">
-        <div class="dialog-header"><h2 id="note-editor-title">新建便签</h2><button type="button" id="note-close" aria-label="关闭便签编辑">×</button></div>
-
-        <label class="note-label" for="note-title">标题 <span>选填</span></label><input id="note-title" maxlength="80" placeholder="标题" />
-        <div class="note-content-heading"><label class="note-label" for="note-text">内容 <span id="note-length">0 / 2000</span></label><label class="note-font-control" for="note-editor-font-size"><span>字号</span><select id="note-editor-font-size" class="note-font-size" aria-label="编辑字号"></select></label></div><div class="note-editor-surface"><pre id="note-highlight" aria-hidden="true"></pre><textarea id="note-text" maxlength="2000" rows="7" placeholder="写点什么…" spellcheck="false"></textarea></div>
-        <label class="note-todo-option"><input type="checkbox" id="note-todo" />设为待办</label>
+        <div class="dialog-header"><h2 id="note-editor-title">新建便签</h2><div class="note-header-actions"><button type="button" id="note-detach" title="在桌面上打开独立窗口">独立窗口</button><button type="button" id="note-window-topmost" aria-pressed="false" hidden>窗口置顶</button><button type="button" id="note-window-dock" hidden>收起到边缘</button><button type="button" id="note-close" aria-label="关闭便签">×</button></div></div>
+        <section id="note-inline-preview" aria-label="便签全文，点击内容编辑" hidden><h3 id="note-inline-title" tabindex="0" title="点击编辑标题"></h3><div id="note-inline-body" tabindex="0" role="region" aria-label="便签内容，点击编辑"></div></section>
+        <div class="note-edit-fields">
+          <label class="note-label" for="note-title">标题 <span>选填</span></label><input id="note-title" maxlength="80" placeholder="标题" />
+          <div class="note-content-heading"><label class="note-label" for="note-text">内容 <span id="note-length">0 / 2000</span></label><label class="note-font-control" for="note-editor-font-size"><span>字号</span><select id="note-editor-font-size" class="note-font-size" aria-label="编辑字号"></select></label></div><div class="note-editor-surface"><pre id="note-highlight" aria-hidden="true"></pre><textarea id="note-text" maxlength="2000" rows="7" placeholder="写点什么…" spellcheck="false"></textarea></div>
+          <label class="note-todo-option"><input type="checkbox" id="note-todo" />设为待办</label>
+        </div>
         <p id="note-draft-status" role="status"></p>
         <section id="note-conflict" class="note-conflict" hidden aria-label="便签版本冲突"><p>另一处的修改不会覆盖你的草稿。</p><details><summary>查看已保存的新版</summary><p id="note-latest"></p></details><div><button type="button" id="note-copy-draft">复制我的草稿</button><button type="button" id="note-save-copy">另存为新便签</button></div></section>
-        <p id="note-error" role="alert"></p><div class="note-form-actions"><button type="button" id="note-discard">放弃草稿</button><button type="button" id="note-cancel" title="关闭后保留未保存草稿">关闭</button><button type="submit" class="primary" id="note-save" title="Ctrl+Enter 保存">保存</button></div>
+        <p id="note-error" role="alert"></p><div class="note-form-actions"><span id="note-read-hint">点击标题或正文即可编辑</span><label id="note-inline-font-control" class="note-font-control" for="note-inline-font-size"><span>字号</span><select id="note-inline-font-size" class="note-font-size" aria-label="阅读字号"></select></label><button type="button" id="note-start-edit" class="primary">编辑</button><button type="button" id="note-discard">放弃草稿</button><button type="button" id="note-cancel" title="关闭后保留未保存草稿">关闭</button><button type="submit" class="primary" id="note-save" title="Ctrl+S 保存并继续编辑；Ctrl+Enter 同样可用">保存</button></div>
       </form>
     </dialog>
     <dialog id="note-delete-dialog" aria-labelledby="note-delete-title"><div class="dialog-header"><h2 id="note-delete-title">删除这条便签？</h2></div><p class="dialog-caption">删除后无法撤销，请确认不再需要。</p><div class="note-form-actions"><button id="note-delete-cancel">保留便签</button><button id="note-delete-confirm" class="primary">确认删除</button></div></dialog>

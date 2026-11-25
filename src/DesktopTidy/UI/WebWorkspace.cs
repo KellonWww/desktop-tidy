@@ -27,6 +27,8 @@ namespace DesktopTidy.UI
         private readonly WorkspaceController owner;
         private readonly WorkspaceForm host;
         private readonly NotesEdgeForm edgeHost;
+        private readonly NoteWindowForm noteHost;
+        private string DraftScope { get { return noteHost != null ? "note-" + noteHost.NoteId : edgeHost != null ? "edge" : "workspace"; } }
         private readonly Form surface;
         private readonly WebView2 browser;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 };
@@ -40,13 +42,15 @@ namespace DesktopTidy.UI
         private int pendingCommands;
         internal bool Ready { get { return ready && !stopped; } }
         internal WebWorkspace(WorkspaceController owner, WorkspaceForm host)
-            : this(owner, host, null) { }
+            : this(owner, host, null, null) { }
         internal WebWorkspace(WorkspaceController owner, NotesEdgeForm host)
-            : this(owner, null, host) { }
-        private WebWorkspace(WorkspaceController owner, WorkspaceForm host, NotesEdgeForm edgeHost)
+            : this(owner, null, host, null) { }
+        internal WebWorkspace(WorkspaceController owner, NoteWindowForm host)
+            : this(owner, null, null, host) { }
+        private WebWorkspace(WorkspaceController owner, WorkspaceForm host, NotesEdgeForm edgeHost, NoteWindowForm noteHost)
         {
-            this.owner = owner; this.host = host; this.edgeHost = edgeHost;
-            surface = (Form)host ?? edgeHost; notes = owner.Notes;
+            this.owner = owner; this.host = host; this.edgeHost = edgeHost; this.noteHost = noteHost;
+            surface = (Form)host ?? (Form)edgeHost ?? noteHost; notes = owner.Notes;
             if (edgeHost != null) feedback = "贴边呼出 · 移开收起 · 编辑时保持展开";
             Dock = DockStyle.Fill; Visible = true;
             browser = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Theme.Read().Background };
@@ -70,7 +74,7 @@ namespace DesktopTidy.UI
         {
             // WinForms can park the native WebView HWND while rebuilding its host.
             // Logical Visible/Parent stay unchanged, so setting Visible alone cannot recover it.
-            if (edgeHost == null || !Ready || !Visible || !IsHandleCreated ||
+            if ((edgeHost == null && noteHost == null) || !Ready || !Visible || !IsHandleCreated ||
                 browser.IsDisposed || !browser.IsHandleCreated) return;
             IntPtr child = browser.Handle, parent = Handle;
             bool parked = GetParent(child) != parent;
@@ -104,14 +108,14 @@ namespace DesktopTidy.UI
                 // Independent native hosts can have different DPI awareness. A separate
                 // renderer profile avoids shared-process initialization failures in either
                 // opening order; notes still come from the same owner.Notes store.
-                if (edgeHost != null) profile = Path.Combine(profile, "NotesEdge");
+                if (edgeHost != null || noteHost != null) profile = Path.Combine(profile, "NotesEdge");
                 CoreWebView2Environment.GetAvailableBrowserVersionString();
                 var environment = await CoreWebView2Environment.CreateAsync(null, profile);
                 if (stopped || IsDisposed) return;
                 // Explorer callbacks can run in a different DPI context from this tool
                 // window. Controller creation must use its actual parent HWND context.
                 System.Threading.Tasks.Task initialization;
-                IntPtr previousDpi = edgeHost == null ? IntPtr.Zero :
+                IntPtr previousDpi = edgeHost == null && noteHost == null ? IntPtr.Zero :
                     SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(browser.Handle));
                 try { initialization = browser.EnsureCoreWebView2Async(environment); }
                 finally { if (previousDpi != IntPtr.Zero) SetThreadDpiAwarenessContext(previousDpi); }
@@ -136,12 +140,12 @@ namespace DesktopTidy.UI
                 core.WebMessageReceived += Receive;
                 try
                 {
-                    string bootstrap = DraftStore.Bootstrap(notes.DataDirectory, edgeHost != null);
+                    string bootstrap = DraftStore.Bootstrap(notes.DataDirectory, DraftScope);
                     if (bootstrap.Length > 0) await core.AddScriptToExecuteOnDocumentCreatedAsync(bootstrap);
                 }
                 catch (Exception error) { Program.Report(error); owner.Notify("独立草稿备份读取失败，保留原文件并使用浏览器草稿。"); }
                 if (stopped || IsDisposed) return;
-                core.Navigate(Origin + "/index.html" + (edgeHost == null ? "" : "?notesEdge=1"));
+                core.Navigate(Origin + "/index.html" + (noteHost != null ? "?noteWindow=" + noteHost.NoteId : edgeHost == null ? "" : "?notesEdge=1"));
             }
             catch (Exception error)
             { Debug.WriteLine(error); Fail("WebView2 不可用：" + error.Message + "，已恢复原生界面。"); }
@@ -158,11 +162,14 @@ namespace DesktopTidy.UI
             if (edgeHost != null) message = message.Replace("已恢复原生界面。", "请从托盘重新打开便签重试。");
             try { updates.Stop(); deadline.Stop(); Visible = false; }
             catch (Exception error) { Debug.WriteLine(error); }
-            try { if (edgeHost != null) edgeHost.WebFailed(message); else host.WebFailed(message); }
+            try { if (noteHost != null) noteHost.WebFailed(message); else if (edgeHost != null) edgeHost.WebFailed(message); else host.WebFailed(message); }
             catch (Exception error) { Debug.WriteLine(error); }
             try { if (!browser.IsDisposed) browser.Dispose(); }
             catch (Exception error) { Debug.WriteLine(error); }
         }
+        // Native window chrome delegates dirty-state decisions to the active editor.
+        internal void NoteWindowEvent(string type)
+        { if (Ready && browser.CoreWebView2 != null) browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = type })); }
         internal void Feedback(string value) { feedback = value; Publish(); }
         internal void RefreshIcons() { iconData.Clear(); previous = null; }
         internal void FocusSearch()
@@ -206,7 +213,7 @@ namespace DesktopTidy.UI
             try
             {
                 var groups = new List<object>();
-                foreach (var group in edgeHost == null ? owner.WebGroups : new List<GroupState>())
+                foreach (var group in edgeHost == null && noteHost == null ? owner.WebGroups : new List<GroupState>())
                 {
                     var members = new List<object>();
                     foreach (var item in owner.WebItems)
@@ -248,7 +255,7 @@ namespace DesktopTidy.UI
                 if (command == "saveDraft")
                 {
                     bool saved = false;
-                    try { DraftStore.Save(notes.DataDirectory, edgeHost != null, ReadText(data, "name"), ReadText(data, "value")); saved = true; }
+                    try { DraftStore.Save(notes.DataDirectory, DraftScope, ReadText(data, "name"), ReadText(data, "value")); saved = true; }
                     catch (Exception error) { Program.Report(error); }
                     browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "draftBackupResult", success = saved }));
                     return;
@@ -257,7 +264,7 @@ namespace DesktopTidy.UI
                 {
                     if (ready) return;
                     ready = true; deadline.Stop(); Visible = true; BringToFront();
-                    if (edgeHost != null) edgeHost.WebReady(); else host.WebReady(); updates.Start(); Publish(); PublishNotes(edgeHost != null); return;
+                    if (noteHost != null) noteHost.WebReady(); else if (edgeHost != null) edgeHost.WebReady(); else host.WebReady(); updates.Start(); Publish(); PublishNotes(edgeHost != null); return;
                 }
                 if (!Ready || executing || pendingCommands >= 64) return;
                 pendingCommands++;
@@ -287,6 +294,14 @@ namespace DesktopTidy.UI
         }
         private void Dispatch(string command, Dictionary<string, object> data)
         {
+            if (command == "openNoteWindow") { owner.OpenNoteWindow(ReadText(data, "id")); return; }
+            if (noteHost != null)
+            {
+                if (command == "requestNoteWindowClose") { noteHost.ConfirmClose(ReadText(data, "dirty") == "true", ReadText(data, "dock") == "true"); return; }
+                if (command == "finishNoteWindowClose") { noteHost.FinishClose(); return; }
+                if (command == "cancelNoteWindowClose") { noteHost.CancelClose(); return; }
+                if (command == "toggleNoteWindowTopMost") { noteHost.ToggleTopMost(); return; }
+            }
             if (command == "saveNote" || command == "deleteNote" || command == "toggleTodo" || command == "togglePin" || command == "copyDraft" || command == "copyNote")
             {
                 string error = null;
@@ -314,9 +329,14 @@ namespace DesktopTidy.UI
                     else error = "便签不存在，请刷新后重试。";
                 }
                 else success = notes.Change(command, ReadText(data, "id"), ReadText(data, "title"), ReadText(data, "text"), ReadText(data, "todo") == "true", ReadText(data, "revision"), out error);
-                browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "notesResult", request = ReadText(data, "request"), success = success, error = error, notes = notes.Notes }));
+                // New notes are appended by NotesStore; return their identity to keep editing after save.
+                string savedId = ReadText(data, "id");
+                if (success && command == "saveNote" && savedId.Length == 0)
+                    foreach (var note in notes.Notes) savedId = note.Id;
+                browser.CoreWebView2.PostWebMessageAsJson(json.Serialize(new { type = "notesResult", request = ReadText(data, "request"), success = success, error = error, savedNoteId = savedId, notes = notes.Notes }));
                 return;
             }
+            if (noteHost != null && command != "noteFontSize") return;
             if (command == "noteFontSize") { owner.CommitNoteFontSize(ReadInt(data, "value")); return; }
             if (edgeHost != null)
             {

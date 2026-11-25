@@ -10,6 +10,37 @@ namespace DesktopTidy.Core
 {
     internal sealed class WorkspaceController : IDisposable
     {
+        private readonly Dictionary<string, NoteWindowForm> noteWindows = new Dictionary<string, NoteWindowForm>();
+        private Action<bool> noteWindowsClosing;
+        internal Action ShowEdgeNotes;
+        // One native window per note; reopening restores a minimized instance instead of duplicating it.
+        internal void OpenNoteWindow(string id)
+        {
+            if (disposed || noteWindowsClosing != null || Notes.Find(id) == null) return;
+            NoteWindowForm window;
+            if (noteWindows.TryGetValue(id, out window))
+            {
+                if (window.WindowState == FormWindowState.Minimized) window.WindowState = FormWindowState.Normal;
+                window.Show(); window.Activate(); return;
+            }
+            window = new NoteWindowForm(this, id); noteWindows.Add(id, window);
+            window.FormClosed += delegate { noteWindows.Remove(id); if (noteWindowsClosing != null) CloseNextNoteWindow(); };
+            window.CloseCanceled += delegate { FinishClosingNoteWindows(false); };
+            window.Show();
+        }
+        // Exit closes windows sequentially so each unsaved note gets a save/discard/cancel decision.
+        internal void CloseNoteWindows(Action<bool> completed)
+        { if (noteWindowsClosing != null) return; noteWindowsClosing = completed; CloseNextNoteWindow(); }
+        private void CloseNextNoteWindow()
+        {
+            foreach (var window in noteWindows.Values) { window.Close(); return; }
+            FinishClosingNoteWindows(true);
+        }
+        private void FinishClosingNoteWindows(bool success)
+        {
+            var completed = noteWindowsClosing; noteWindowsClosing = null;
+            if (completed != null) completed(success);
+        }
         private NotesStore notes;
         internal NotesStore Notes { get { return notes ?? (notes = new NotesStore()); } set { notes = value; } }
         internal string WebProfileDirectory { get; set; }
@@ -911,6 +942,8 @@ namespace DesktopTidy.Core
             finally
             {
                 // Restoration must not depend on successfully persisting the layout.
+                foreach (var window in new List<NoteWindowForm>(noteWindows.Values)) window.Dispose();
+                noteWindows.Clear();
                 itemChanges.Dispose();
                 foreach (var watcher in itemWatchers.Values) watcher.Dispose();
                 itemWatchers.Clear(); changedItemPaths.Clear();

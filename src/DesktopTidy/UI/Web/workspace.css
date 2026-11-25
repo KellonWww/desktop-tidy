@@ -1407,3 +1407,39 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     border-inline-start-width: 4px;
   }
 }
+
+/* One content surface switches between reading and editing without moving the dialog. */
+#note-editor[open] { display: flex; flex-direction: column; height: min(820px, calc(100dvh - 32px)); }
+#note-form { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+.note-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+#note-editor .note-header-actions button { width: auto; height: auto; white-space: nowrap; line-height: 1.4; min-height: 32px; padding: 6px 9px; border-radius: 6px; font-size: 12px; }
+.note-header-actions button:hover, #note-window-topmost[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#note-editor .dialog-header { flex-shrink: 0; flex-wrap: wrap; gap: 12px; }
+#note-editor-title { font-size: 16px; white-space: nowrap; }
+#note-inline-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; }
+#note-inline-title { font-size: calc(var(--note-font-size) + 4px); color: var(--note-title-ink); white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; cursor: text; }
+#note-inline-body { flex: 1; min-height: 120px; padding: 16px 0; font-size: var(--note-font-size); line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; cursor: text; }
+.note-edit-fields { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; }
+/* Compact native windows scroll the fields, never push Save outside the client area. */
+.note-edit-fields > :not(.note-editor-surface) { flex-shrink: 0; }
+#note-form > :not(.note-edit-fields):not(#note-inline-preview) { flex-shrink: 0; }
+#note-form > .note-conflict { flex-shrink: 1; min-height: 0; max-height: 35%; overflow: auto; }
+.note-edit-fields .note-editor-surface { flex: 1 0 180px; min-height: 180px; }
+#note-editor #note-text { height: 100%; resize: none; }
+#note-editor .note-form-actions { flex-shrink: 0; position: static; margin-top: 10px; gap: 8px; flex-wrap: wrap; }
+#note-read-hint { color: var(--muted); margin-right: auto; font-size: 12px; }
+#note-editor:not(.note-reading) #note-inline-font-control, #note-editor:not(.note-reading) #note-start-edit, #note-editor:not(.note-reading) #note-read-hint,
+#note-editor.note-reading .note-edit-fields, #note-editor.note-reading #note-discard, #note-editor.note-reading #note-save { display: none; }
+#note-inline-title:focus-visible, #note-inline-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The OS owns window move/resize/maximize; no simulated chrome inside native note windows. */
+.note-window .app { display: none !important; }
+.note-window #note-editor[open] { position: fixed; inset: 0; margin: 0; width: 100%; height: 100%; max-width: none; max-height: none; border: 0; border-radius: 0; box-shadow: none; padding: 20px; }
+.note-window #note-editor::backdrop { background: var(--surface); }
+.note-window #note-editor .dialog-header { cursor: default; }
+.note-window #note-close, .note-window #note-discard { display: none; }
+@media (max-width: 520px) {
+  #note-editor .dialog-header { align-items: flex-start; }
+  .note-header-actions { max-width: 260px; }
+  .note-window #note-editor[open] { padding: 14px; }
+  #note-read-hint { flex-basis: 100%; }
+}

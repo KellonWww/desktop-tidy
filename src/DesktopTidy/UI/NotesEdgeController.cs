@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -35,6 +35,7 @@ namespace DesktopTidy.UI
         internal NotesEdgeController(WorkspaceController owner, Action<string> notify, string preferences)
         {
             this.owner = owner; this.notify = notify; this.preferences = preferences;
+            owner.ShowEdgeNotes = ShowFromTray;
             owner.EdgeNotesEnabled = ReadEnabled(); owner.ToggleEdgeNotes = Toggle;
             ReadOptions(); trigger.HoverDelay = owner.EdgeNotesDelay;
             owner.EdgeNotesDockStatus = DockStatus(DockScreen());
@@ -68,7 +69,7 @@ namespace DesktopTidy.UI
                     {
                         dockSide = savedSide; owner.EdgeNotesDockSide = dockSide.ToString(); owner.EdgeNotesDockScreen = dock[1];
                     }
-                    dockPosition = Math.Max(0, Math.Min(10000, Convert.ToInt32(key.GetValue("EdgeNotesHandlePosition", 5000))));
+                    dockPosition = Math.Max(0, Math.Min(10000, dock.Length >= 3 ? Convert.ToInt32(dock[2]) : Convert.ToInt32(key.GetValue("EdgeNotesHandlePosition", 5000))));
                     string[] options = Convert.ToString(key.GetValue("EdgeNotesOptions", "600|all")).Split('|');
                     int delay = options.Length == 2 ? Convert.ToInt32(options[0]) : 600;
                     owner.EdgeNotesDelay = delay == 300 || delay == 600 || delay == 1000 ? delay : 600;
@@ -184,7 +185,7 @@ namespace DesktopTidy.UI
             Screen screen = DockScreen();
             if (!Enabled || (panel != null && panel.Visible) || !Allows(screen) || Fullscreen(screen))
             { if (dockHandle != null) dockHandle.Hide(); return; }
-            if (dockHandle == null) dockHandle = new NotesDockHandle(ShowFromTray, MoveHandle);
+            if (dockHandle == null) dockHandle = new NotesDockHandle(ShowFromTray, PreviewDock, CompleteHandleDock);
             double opacity = owner.OpacityPercent / 100.0;
             if (dockHandle.Opacity != opacity) dockHandle.Opacity = opacity;
             Rectangle bounds = NotesEdgeGeometry.HandleBounds(screen.WorkingArea, dockSide, Scale(), dockPosition);
@@ -195,27 +196,11 @@ namespace DesktopTidy.UI
             }
             owner.EdgeNotesDockStatus = DockStatus(screen);
         }
-        private void MoveHandle(int position)
-        {
-            if (disposed) return;
-            dockPosition = Math.Max(0, Math.Min(10000, position)); handleSignature = null;
-            try
-            {
-                using (var key = Registry.CurrentUser.CreateSubKey(preferences))
-                {
-                    if (key == null) throw new IOException("无法打开个人设置");
-                    key.SetValue("EdgeNotesHandlePosition", dockPosition, RegistryValueKind.DWord);
-                }
-            }
-            catch (Exception error)
-            {
-                if (!SettingsError(error)) throw;
-                Debug.WriteLine(error); notify("便签把手位置保存失败，本次仍可继续使用。");
-            }
-            owner.EdgeNotesDockStatus = DockStatus(DockScreen());
-        }
+        // Handle and expanded panel share edge selection, but a handle drop stays collapsed.
+        private void CompleteHandleDock(Point point, bool canceled) { CompleteDock(point, canceled, false); }
         private string DockStatus(Screen screen)
         { return "已吸附" + NotesEdgeGeometry.Name(dockSide) + "（" + screen.DeviceName + "）· 收起后留有便签把手"; }
+        // Update docking status without displaying an overlay during dragging.
         private void PreviewDock(Point point)
         {
             Screen screen = Screen.FromPoint(point);
@@ -223,19 +208,28 @@ namespace DesktopTidy.UI
                 "（" + screen.DeviceName + "）· Esc 取消" : "此屏幕不在呼出范围内 · 松手返回原位";
         }
         private void CompleteDock(Point point, bool canceled)
+        { CompleteDock(point, canceled, true); }
+        private void CompleteDock(Point point, bool canceled, bool expanded)
         {
             Screen screen = Screen.FromPoint(point);
             if (!canceled && Allows(screen))
             {
                 NotesEdge side = NotesEdgeGeometry.Nearest(screen.WorkingArea, point);
+                Rectangle work = screen.WorkingArea;
+                Rectangle handle = NotesEdgeGeometry.HandleBounds(work, side, Scale());
+                bool vertical = side == NotesEdge.Left || side == NotesEdge.Right;
+                int range = vertical ? work.Height - handle.Height : work.Width - handle.Width;
+                int offset = vertical ? point.Y - work.Top - handle.Height / 2 : point.X - work.Left - handle.Width / 2;
+                int position = range <= 0 ? 5000 : Math.Max(0, Math.Min(10000, (int)Math.Round(offset * 10000.0 / range)));
                 try
                 {
                     using (var key = Registry.CurrentUser.CreateSubKey(preferences))
                     {
                         if (key == null) throw new IOException("无法打开个人设置");
-                        key.SetValue("EdgeNotesDock", side + "|" + screen.DeviceName, RegistryValueKind.String);
+                        // Commit side, screen and offset atomically as one preference value.
+                        key.SetValue("EdgeNotesDock", side + "|" + screen.DeviceName + "|" + position, RegistryValueKind.String);
                     }
-                    dockSide = side; owner.EdgeNotesDockSide = side.ToString(); owner.EdgeNotesDockScreen = screen.DeviceName;
+                    dockPosition = position; dockSide = side; owner.EdgeNotesDockSide = side.ToString(); owner.EdgeNotesDockScreen = screen.DeviceName;
                 }
                 catch (Exception error)
                 {
@@ -244,7 +238,8 @@ namespace DesktopTidy.UI
                 }
             }
             else if (!canceled) notify("此屏幕不在便签呼出范围内，已返回原位置；可在贴边设置中修改范围。");
-            trigger.Suppress(); handleSignature = null; Reveal(DockScreen(), dockSide, false);
+            trigger.Suppress(); handleSignature = null;
+            if (expanded) Reveal(DockScreen(), dockSide, false); else UpdateHandle();
         }
         internal void ShowFromTray()
         {
@@ -290,7 +285,7 @@ namespace DesktopTidy.UI
         {
             if (disposed) return;
             disposed = true; watch.Stop(); watch.Dispose(); clock.Stop();
-            owner.ToggleEdgeNotes = null; owner.ConfigureEdgeNotes = null; owner.PauseEdgeNotes = null;
+            owner.ShowEdgeNotes = null; owner.ToggleEdgeNotes = null; owner.ConfigureEdgeNotes = null; owner.PauseEdgeNotes = null;
             if (panel != null) { panel.Dispose(); panel = null; }
             if (dockHandle != null) { dockHandle.Dispose(); dockHandle = null; }
         }

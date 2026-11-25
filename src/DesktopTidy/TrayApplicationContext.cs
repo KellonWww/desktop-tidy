@@ -20,7 +20,7 @@ namespace DesktopTidy
         private readonly Font menuFont = new Font("Microsoft YaHei UI", 9F);
         private WorkspaceController workspace;
         private readonly NotesEdgeController edgeNotes;
-        private bool scanning, exitRequested, disposed;
+        private bool scanning, exitRequested, preparingExit, disposed;
         private DesktopReadResult pending, lastResult;
         private readonly object resultLock = new object();
         internal TrayApplicationContext(bool keepTray, bool diagnostic)
@@ -47,8 +47,13 @@ namespace DesktopTidy
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("数据备份与恢复 / 诊断", null, delegate
             {
-                using (var dialog = new RecoveryForm(GetWorkspace().Notes))
-                { dialog.ShowDialog(); if (dialog.Restored) RequestExit(); }
+                // Flush/close note editors first: a late save must never overwrite restored data.
+                GetWorkspace().CloseNoteWindows(delegate(bool closed)
+                {
+                    if (!closed) return;
+                    using (var dialog = new RecoveryForm(GetWorkspace().Notes))
+                    { dialog.ShowDialog(); if (dialog.Restored) CompleteExit(); }
+                });
             });
             menu.Items.Add("退出", null, delegate { RequestExit(); });
             tray = new NotifyIcon { Icon = AppBrand.Icon, Text = "桌面整理 · 分类工作区", ContextMenuStrip = menu, Visible = true };
@@ -122,6 +127,13 @@ namespace DesktopTidy
             thread.IsBackground = true; thread.SetApartmentState(ApartmentState.STA); thread.Start();
         }
         private void RequestExit()
+        {
+            if (exitRequested || preparingExit) return;
+            preparingExit = true;
+            if (workspace == null) CompleteExit();
+            else workspace.CloseNoteWindows(delegate(bool success) { preparingExit = false; if (success) CompleteExit(); });
+        }
+        private void CompleteExit()
         {
             if (exitRequested) return; exitRequested = true; tray.Visible = false;
             try

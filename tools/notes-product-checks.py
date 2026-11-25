@@ -72,6 +72,9 @@ def main():
         page.locator("#note-restore").click()
         expect(page.locator("#note-text")).to_have_value("关闭和重启也不能丢")
         page.locator("#note-text").press("Control+Enter")
+        expect(page.locator("#note-draft-status")).to_have_text("已保存")
+        expect(page.locator("#note-editor")).to_be_visible()
+        page.locator("#note-cancel").click()
         expect(page.locator("#note-editor")).not_to_be_visible()
         expect(page.locator("#note-drafts")).not_to_be_visible()
         expect(page.locator(".note-card")).to_have_count(3)
@@ -86,6 +89,8 @@ def main():
         expect(page.locator("#notes-status")).to_have_text("草稿已复制到剪贴板")
         assert page.evaluate("mock.commands.findLast(m => m.command === 'copyDraft').text.includes('我自己的修改')")
         page.locator("#note-save-copy").click()
+        expect(page.locator("#note-draft-status")).to_have_text("已保存")
+        page.locator("#note-cancel").click()
         expect(page.locator("#note-editor")).not_to_be_visible()
         expect(page.locator(".note-card")).to_have_count(4)
         assert page.evaluate("mock.state.notes.some(n => n.Text === '另一个窗口的新版')")
@@ -97,16 +102,16 @@ def main():
         expect(page.locator("#note-drafts")).not_to_be_visible()
         # Reading and editing surfaces can be resized and then moved within the workspace.
         page.locator(".note-preview").first.click()
-        reader_before = page.locator("#note-reader").bounding_box()
-        reader_grip = page.locator("#note-reader .note-window-resize").bounding_box()
+        reader_before = page.locator("#note-editor").bounding_box()
+        reader_grip = page.locator("#note-editor .note-window-resize").bounding_box()
         page.mouse.move(reader_grip["x"] + 12, reader_grip["y"] + 12); page.mouse.down(); page.mouse.move(reader_grip["x"] - 68, reader_grip["y"] - 48); page.mouse.up()
-        reader_resized = page.locator("#note-reader").bounding_box()
+        reader_resized = page.locator("#note-editor").bounding_box()
         assert reader_resized["width"] < reader_before["width"] - 40 and reader_resized["height"] < reader_before["height"] - 30
-        reader_title = page.locator("#note-reader-title").bounding_box()
+        reader_title = page.locator("#note-editor-title").bounding_box()
         page.mouse.move(reader_title["x"] + 20, reader_title["y"] + 12); page.mouse.down(); page.mouse.move(reader_title["x"] + 55, reader_title["y"] + 42); page.mouse.up()
-        reader_moved = page.locator("#note-reader").bounding_box()
+        reader_moved = page.locator("#note-editor").bounding_box()
         assert reader_moved["x"] > reader_resized["x"] + 20 and reader_moved["y"] > reader_resized["y"] + 15
-        page.locator("#note-reader-edit").click()
+        page.locator("#note-start-edit").click()
         editor_before = page.locator("#note-editor").bounding_box()
         editor_title = page.locator("#note-editor-title").bounding_box()
         page.mouse.move(editor_title["x"] + 20, editor_title["y"] + 12); page.mouse.down(); page.mouse.move(editor_title["x"] + 48, editor_title["y"] + 34); page.mouse.up()
@@ -175,20 +180,20 @@ def main():
         copy_box = card.get_by_role("button", name="复制便签文本", exact=True).bounding_box()
         assert edit_box["height"] >= 44 and copy_box["y"] >= edit_box["y"] + edit_box["height"] + 10
         preview.focus(); preview.press("Enter")
-        expect(edge.locator("#note-reader")).to_be_visible()
-        expect(edge.locator("#note-reader-body")).to_have_text(long_text)
-        assert edge.locator("#note-reader textarea").count() == 0
-        edge.wait_for_function("() => mock.commands.filter(m => m.command === 'notesInteraction').at(-1).value === 'true'")
-        assert edge.locator("#note-reader-body").bounding_box()["height"] > 400
-        assert edge.locator("#note-reader .note-window-resize").count() == 1
+        expect(edge.locator("#note-editor")).to_be_visible()
+        expect(edge.locator("#note-inline-body")).to_have_text(long_text)
+        expect(edge.locator("#note-text")).not_to_be_visible()
+        edge.wait_for_function("() => mock.commands.filter(m => m.command === 'notesInteraction').at(-1).value === 'false'")
+        assert edge.locator("#note-inline-body").bounding_box()["height"] > 400
+        assert edge.locator("#note-editor .note-window-resize").count() == 1
         if args.screenshots:
             edge.screenshot(path=str(args.screenshots / "notes-focus-reading.png"), animations="disabled")
         edge.keyboard.press("Escape")
-        expect(edge.locator("#note-reader")).not_to_be_visible()
+        expect(edge.locator("#note-editor")).not_to_be_visible()
         edge.wait_for_function("() => mock.commands.filter(m => m.command === 'notesInteraction').at(-1).value === 'false'")
         preview.focus(); preview.press("Space")
-        edge.locator("#note-reader-edit").click()
-        expect(edge.locator("#note-reader")).not_to_be_visible()
+        edge.locator("#note-start-edit").click()
+        expect(edge.locator("#note-inline-preview")).not_to_be_visible()
         expect(edge.locator("#note-editor")).to_be_visible()
         expect(edge.locator("#note-text")).to_have_value(long_text)
         assert edge.locator("#note-text").bounding_box()["height"] >= 300
@@ -199,18 +204,18 @@ def main():
         edge.locator("#note-cancel").click()
         # Reading follows shared changes, including deletion, without writing or copying.
         preview.click()
-        edge.evaluate("mock.state.notes = mock.state.notes.map(n => n.Text.startsWith('完整阅读测试') ? {...n, Text: '另一窗口更新的正文'} : n); mock.emit(mock.state)")
-        expect(edge.locator("#note-reader-body")).to_have_text("另一窗口更新的正文")
+        edge.evaluate("mock.state.notes = mock.state.notes.map(n => n.Text.startsWith('完整阅读测试') ? {...n, Text: '另一窗口更新的正文', Updated:'reading-external-v2'} : n); mock.emit(mock.state)")
+        expect(edge.locator("#note-inline-body")).to_have_text("另一窗口更新的正文")
         edge.evaluate("mock.state.notes = mock.state.notes.filter(n => n.Text !== '另一窗口更新的正文'); mock.emit(mock.state)")
-        expect(edge.locator("#note-reader-title")).to_have_text("便签已删除")
-        expect(edge.locator("#note-reader-edit")).to_be_disabled()
-        edge.locator("#note-reader-close").click()
+        expect(edge.locator("#note-editor-title")).to_have_text("便签已删除")
+        expect(edge.locator("#note-start-edit")).to_be_disabled()
+        edge.locator("#note-cancel").click()
         for width, height in [(360, 500), (440, 760)]:
             edge.set_viewport_size({"width": width, "height": height})
             edge.locator(".note-preview").first.click()
-            assert edge.locator("#note-reader").bounding_box()["width"] <= width
-            assert edge.locator("#note-reader").bounding_box()["height"] <= height
-            edge.locator("#note-reader-edit").click()
+            assert edge.locator("#note-editor").bounding_box()["width"] <= width
+            assert edge.locator("#note-editor").bounding_box()["height"] <= height
+            edge.locator("#note-start-edit").click()
             assert edge.locator("#note-editor").bounding_box()["width"] <= width
             assert edge.evaluate("document.documentElement.scrollWidth <= innerWidth")
             edge.locator("#note-cancel").click()

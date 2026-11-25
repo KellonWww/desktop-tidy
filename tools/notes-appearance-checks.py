@@ -64,20 +64,23 @@ def main():
             assert page.evaluate("Math.abs(document.querySelector('#note-text').scrollTop - document.querySelector('#note-highlight').scrollTop) <= 1")
             page.locator("#note-text").fill(text)
             page.locator("#note-save").click()
+            expect(page.locator("#note-draft-status")).to_have_text("已保存")
+            expect(page.locator("#note-editor")).to_be_visible()
+            page.locator("#note-cancel").click()
             expect(page.locator("#note-editor")).not_to_be_visible()
             expect(page.locator(".note-body")).to_have_text(text)
             assert page.locator(".note-body .note-syntax-keyword").count() > 0
             page.locator(".note-preview").click()
-            expect(page.locator("#note-reader-body")).to_have_text(text)
-            page.locator("#note-reader-font-size").select_option("28")
-            assert page.locator("#note-reader-body").evaluate("el => getComputedStyle(el).fontSize") == "28px"
+            expect(page.locator("#note-inline-body")).to_have_text(text)
+            page.locator("#note-inline-font-size").select_option("28")
+            assert page.locator("#note-inline-body").evaluate("el => getComputedStyle(el).fontSize") == "28px"
             assert page.locator(".note-body").evaluate("el => getComputedStyle(el).fontSize") == "28px"
             expect(page.locator("#notes-font-size")).to_have_value("28")
-            assert page.locator("#note-reader-body .note-syntax-keyword").count() > 0
-            assert page.locator("#note-reader-body img").count() == 0
+            assert page.locator("#note-inline-body .note-syntax-keyword").count() > 0
+            assert page.locator("#note-inline-body img").count() == 0
             assert page.evaluate("mock.state.notes[0].Text") == text
             page.emulate_media(forced_colors="active")
-            assert page.locator("#note-reader-body").evaluate("el => getComputedStyle(el).backgroundImage") == "none"
+            assert page.locator("#note-inline-body").evaluate("el => getComputedStyle(el).backgroundImage") == "none"
             assert not errors, errors
             page.close()
         browser.close()

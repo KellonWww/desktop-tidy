@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -264,29 +264,34 @@ namespace DesktopTidy.UI
         private readonly NotesDockButton button;
         private readonly ToolTip tip = new ToolTip();
         private readonly Action open;
-        private readonly Action<int> moved;
-        private NotesEdge side;
-        private Rectangle workArea, dragBounds;
+        private readonly Action<Point> preview;
+        private readonly Action<Point, bool> moved;
+        private readonly Timer dragWatch = new Timer { Interval = 16 };
+        private Rectangle dragBounds;
         private Point dragStart;
         private bool dragMoved, suppressClick;
         internal bool Dragging { get; private set; }
         protected override bool ShowWithoutActivation { get { return true; } }
         protected override CreateParams CreateParams
         { get { var value = base.CreateParams; value.ExStyle |= 0x80 | 0x08000000; return value; } }
-        internal NotesDockHandle(Action open, Action<int> moved)
+        internal NotesDockHandle(Action open, Action<Point> preview, Action<Point, bool> moved)
         {
-            this.open = open; this.moved = moved;
+            this.open = open; this.preview = preview; this.moved = moved;
+            dragWatch.Tick += delegate {
+                if ((GetAsyncKeyState(0x1B) & 0x8000) != 0) FinishDrag(Cursor.Position, true);
+                else ContinueDrag(Cursor.Position, (GetAsyncKeyState(0x01) & 0x8000) != 0);
+            };
             Text = "便签停靠位置"; FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false;
             TopMost = true; StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None; MinimumSize = new Size(1, 1);
             button = new NotesDockButton { Dock = DockStyle.Fill, TabStop = false };
             button.MouseDown += delegate(object sender, MouseEventArgs e)
             {
                 if (e.Button != MouseButtons.Left) return;
-                button.Capture = true; StartDrag(Cursor.Position);
+                suppressClick = false; button.Capture = true; StartDrag(button.PointToScreen(e.Location));
             };
-            button.MouseMove += delegate
+            button.MouseMove += delegate(object sender, MouseEventArgs e)
             {
-                if (Dragging) ContinueDrag(Cursor.Position, true);
+                if (Dragging) ContinueDrag(button.PointToScreen(e.Location), true);
             };
             button.MouseUp += delegate(object sender, MouseEventArgs e)
             {
@@ -294,14 +299,18 @@ namespace DesktopTidy.UI
                 ContinueDrag(Cursor.Position, false); button.Capture = false;
             };
             button.Click += delegate { if (suppressClick) suppressClick = false; else open(); };
-            button.MouseCaptureChanged += delegate { if (Dragging && !button.Capture) Dragging = false; };
+            // Moving this non-activating window can release
+            // Button capture while the mouse is still held. The physical-button timer
+            // remains authoritative, rather than treating capture loss as cancellation.
             Controls.Add(button);
         }
+        // Remember the press event position before queued mouse movement can overtake it.
         internal void StartDrag(Point point)
         {
             if (!Visible || Dragging) return;
-            dragStart = point; dragBounds = Bounds; dragMoved = false; Dragging = true;
+            dragStart = point; dragBounds = Bounds; dragMoved = false; Dragging = true; dragWatch.Start();
         }
+        // Track both axes until physical release; the last displacement also counts.
         internal void ContinueDrag(Point point, bool leftDown)
         {
             if (!Dragging) return;
@@ -311,22 +320,31 @@ namespace DesktopTidy.UI
                 Size threshold = SystemInformation.DragSize;
                 if (!dragMoved && Math.Abs(dx) < threshold.Width / 2 && Math.Abs(dy) < threshold.Height / 2) return;
                 dragMoved = true; suppressClick = true;
-                bool vertical = side == NotesEdge.Left || side == NotesEdge.Right;
-                int x = side == NotesEdge.Left ? workArea.Left : side == NotesEdge.Right ? workArea.Right - Width :
-                    Math.Max(workArea.Left, Math.Min(workArea.Right - Width, dragBounds.Left + dx));
-                int y = side == NotesEdge.Top ? workArea.Top : side == NotesEdge.Bottom ? workArea.Bottom - Height :
-                    Math.Max(workArea.Top, Math.Min(workArea.Bottom - Height, dragBounds.Top + dy));
-                Location = new Point(x, y);
+                // The collapsed handle follows both axes; only release decides its edge.
+                Location = new Point(dragBounds.Left + dx, dragBounds.Top + dy);
+                preview(point);
                 return;
             }
-            Dragging = false;
-            if (!dragMoved) return;
-            bool alongVertical = side == NotesEdge.Left || side == NotesEdge.Right;
-            int range = alongVertical ? workArea.Height - Height : workArea.Width - Width;
-            int offset = alongVertical ? Top - workArea.Top : Left - workArea.Left;
-            moved(range <= 0 ? 5000 : (int)Math.Round(offset * 10000.0 / range));
-            if (suppressClick && IsHandleCreated) BeginInvoke((Action)delegate { suppressClick = false; });
+            // A fast release may arrive before the last MouseMove or timer tick.
+            // Include that final displacement before deciding whether this was a click.
+            Size releaseThreshold = SystemInformation.DragSize;
+            if (Math.Abs(dx) >= releaseThreshold.Width / 2 || Math.Abs(dy) >= releaseThreshold.Height / 2)
+            { dragMoved = true; suppressClick = true; }
+            FinishDrag(point, false);
         }
+        // Restore on Escape; a simple click must still open the drawer.
+        private void FinishDrag(Point point, bool canceled)
+        {
+            if (!Dragging) return;
+            Dragging = false; dragWatch.Stop();
+            bool changed = dragMoved;
+            if (canceled) { Location = dragBounds.Location; suppressClick = true; }
+            button.Capture = false;
+            if (changed) moved(point, canceled);
+            // Keep suppression until Click consumes it or a fresh MouseDown starts.
+            // A posted reset can run before a delayed MouseUp and accidentally open the drawer.
+        }
+        [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
         protected override void CreateHandle()
         {
             IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
@@ -335,7 +353,7 @@ namespace DesktopTidy.UI
         [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
         internal void Place(Rectangle bounds, NotesEdge side, string screen, bool paused)
         {
-            this.side = side; workArea = Screen.FromRectangle(bounds).WorkingArea; Bounds = bounds;
+            Bounds = bounds;
             button.Cursor = Cursors.Default;
             Theme theme = Theme.Read(); BackColor = theme.Surface;
             button.SetAppearance(theme, side, paused);
@@ -349,7 +367,7 @@ namespace DesktopTidy.UI
             if (!Visible) Show();
         }
         protected override void Dispose(bool disposing)
-        { if (disposing) tip.Dispose(); base.Dispose(disposing); }
+        { if (disposing) { dragWatch.Stop(); dragWatch.Dispose(); tip.Dispose(); } base.Dispose(disposing); }
     }
 
     // Owner-drawn so the dock landmark never inherits the system button border or focus rectangle.

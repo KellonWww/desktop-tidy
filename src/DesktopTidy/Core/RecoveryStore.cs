@@ -17,6 +17,19 @@ namespace DesktopTidy.Core
     {
         private readonly string directory;
         private static readonly string[] Names = { "notes.json", "drafts-workspace.json", "drafts-edge.json", "Workspace/layout.json" };
+        // Only GUID-scoped note mirrors are permitted beyond the original version-one manifest.
+        private static bool IsNoteDraft(string name)
+        {
+            Guid id;
+            return name.Length == 48 && name.StartsWith("drafts-note-", StringComparison.Ordinal) &&
+                name.EndsWith(".json", StringComparison.Ordinal) && Guid.TryParseExact(name.Substring(11, 32), "N", out id);
+        }
+        private IEnumerable<string> NoteDraftNames()
+        {
+            if (!Directory.Exists(directory)) yield break;
+            foreach (string path in Directory.GetFiles(directory, "drafts-note-*.json"))
+            { string name = Path.GetFileName(path); if (IsNoteDraft(name)) yield return name; }
+        }
         private const int Maximum = 16 * 1024 * 1024;
         internal RecoveryStore(string directory) { this.directory = directory; }
         private string Target(string name) { return Path.Combine(directory, name.Replace('/', Path.DirectorySeparatorChar)); }
@@ -35,12 +48,16 @@ namespace DesktopTidy.Core
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(content)))
             {
                 var bundle = (RecoveryBundle)new DataContractJsonSerializer(typeof(RecoveryBundle)).ReadObject(stream);
-                if (bundle == null || bundle.Version != 1 || bundle.Files == null || bundle.Files.Count != Names.Length) throw new InvalidDataException("备份版本或文件清单不受支持");
+                if (bundle == null || bundle.Version != 1 || bundle.Files == null || bundle.Files.Count < Names.Length || bundle.Files.Count > 4096) throw new InvalidDataException("备份版本或文件清单不受支持");
                 foreach (string name in Names)
                 {
                     string value;
                     if (!bundle.Files.TryGetValue(name, out value)) throw new InvalidDataException("备份缺少文件记录");
-                    if (value != null && validate) ValidateFile(name, value);
+                }
+                foreach (var entry in bundle.Files)
+                {
+                    if (Array.IndexOf(Names, entry.Key) < 0 && !IsNoteDraft(entry.Key)) throw new InvalidDataException("备份包含不支持的文件");
+                    if (entry.Value != null && validate) ValidateFile(entry.Key, entry.Value);
                 }
                 return bundle;
             }
@@ -57,6 +74,8 @@ namespace DesktopTidy.Core
         {
             var bundle = new RecoveryBundle();
             foreach (string name in Names) bundle.Files.Add(name, File.Exists(Target(name)) ? AtomicFile.Read(Target(name), DraftStore.Maximum) : null);
+            foreach (string name in NoteDraftNames()) bundle.Files.Add(name, AtomicFile.Read(Target(name), DraftStore.Maximum));
+            if (bundle.Files.Count > 4096) throw new InvalidDataException("草稿文件过多，无法生成备份");
             return bundle;
         }
         internal void Export(string output)
@@ -68,9 +87,15 @@ namespace DesktopTidy.Core
         }
         private void Apply(RecoveryBundle bundle)
         {
-            foreach (string name in Names)
+            // Include current-only note scopes when restoring an older backup. An empty durable
+            // mirror clears their browser cache too, rather than resurrecting a stale draft.
+            var names = new HashSet<string>(bundle.Files.Keys);
+            foreach (string name in NoteDraftNames()) names.Add(name);
+            foreach (string name in names)
             {
-                string value = bundle.Files[name], target = Target(name);
+                string value; bundle.Files.TryGetValue(name, out value);
+                string target = Target(name);
+                if (value == null && IsNoteDraft(name)) { AtomicFile.Write(target, "{}"); continue; }
                 if (value == null) { if (File.Exists(target)) File.Delete(target); }
                 else AtomicFile.Write(target, value);
             }

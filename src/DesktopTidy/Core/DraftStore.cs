@@ -9,6 +9,15 @@ namespace DesktopTidy.Core
     {
         internal const int Maximum = 2 * 1024 * 1024;
         internal static string FileName(bool edge) { return "drafts-" + (edge ? "edge" : "workspace") + ".json"; }
+        // Every independent note has a separate mirror, so parallel windows cannot replace drafts.
+        private static string ScopedFileName(string scope)
+        {
+            Guid id;
+            if (scope != "edge" && scope != "workspace" &&
+                (!scope.StartsWith("note-", StringComparison.Ordinal) || !Guid.TryParseExact(scope.Substring(5), "N", out id)))
+                throw new InvalidDataException("草稿窗口标识无效");
+            return "drafts-" + scope + ".json";
+        }
         internal static void Validate(string content)
         {
             if (content == null || content.Length > Maximum) throw new InvalidDataException("草稿过大");
@@ -46,21 +55,23 @@ namespace DesktopTidy.Core
             object value;
             if (!data.TryGetValue(key, out value) || !(value is bool)) throw new InvalidDataException("草稿选项无效");
         }
-        internal static string Bootstrap(string directory, bool edge)
+        internal static string Bootstrap(string directory, bool edge) { return Bootstrap(directory, edge ? "edge" : "workspace"); }
+        internal static string Bootstrap(string directory, string scope)
         {
-            string file = Path.Combine(directory, FileName(edge));
+            string file = Path.Combine(directory, ScopedFileName(scope));
             if (!File.Exists(file)) return "";
             string content = AtomicFile.Read(file, Maximum); Validate(content);
             var json = new JavaScriptSerializer { MaxJsonLength = Maximum };
             // The durable mirror is authoritative after an explicit backup restore.
             return "(() => { const data = " + content + "; for (const name of ['drafts','quick']) { const key = " +
-                json.Serialize("desktop-tidy.notes." + (edge ? "edge" : "workspace") + ".") +
+                json.Serialize("desktop-tidy.notes." + scope + ".") +
                 " + name; if (data[name] !== undefined) localStorage.setItem(key, data[name]); else localStorage.removeItem(key); } })();";
         }
-        internal static void Save(string directory, bool edge, string name, string value)
+        internal static void Save(string directory, bool edge, string name, string value) { Save(directory, edge ? "edge" : "workspace", name, value); }
+        internal static void Save(string directory, string scope, string name, string value)
         {
             ValidateValue(name, value);
-            string file = Path.Combine(directory, FileName(edge));
+            string file = Path.Combine(directory, ScopedFileName(scope));
             var json = new JavaScriptSerializer { MaxJsonLength = Maximum };
             var bundle = new Dictionary<string, string>();
             if (File.Exists(file))
