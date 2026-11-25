@@ -7,7 +7,7 @@
 - **四边磁吸**：拖动便签顶部或收起后的磁贴，在上下左右自由换边。
 - **简约界面**：灰白 / 石墨双主题，跟随系统；低频设置按需展开。
 
-当前构建版本为 **1.0.2**，线上安装包以 Releases 实际发布为准。本版增强便签标题对比度，修复整理区空白处右键及隐藏桌面图标后的菜单交互；本地数据格式不变。
+当前构建版本为 **1.0.3**，线上安装包以 Releases 实际发布为准。本版修复便签磁贴四边拖动，支持点击内容编辑、Ctrl+S 保存及可移动缩放的独立窗口，并移除拖动浮动提示；兼容已有便签数据。
 
 ## 界面预览
 
@@ -46,7 +46,7 @@
 下载后在命令提示符校验，并与发布页提供的 SHA-256 比对（将文件名替换为实际下载名称）：
 
 ```bat
-certutil -hashfile DesktopTidy-1.0.2-win-x64.zip SHA256
+certutil -hashfile DesktopTidy-1.0.3-win-x64.zip SHA256
 ```
 
 ## 桌面整理
@@ -160,13 +160,13 @@ python scripts/package-release.py
 ```
 
 - 本地统一入口：`build/release/DesktopTidy.exe`，构建不会自动启动或执行测试。
-- 打包默认输出 `dist/DesktopTidy-1.0.2-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
+- 打包默认输出 `dist/DesktopTidy-1.0.3-win-x64.zip` 和 `SHA256SUMS.txt`，已有同名包不会覆盖；可用 `--version` 指定包名版本。
 - 用户包只包含主程序、离线网页、运行依赖、配置及说明，不包含诊断工具或个人数据。
 
 Windows 安装包（先安装官方 Inno Setup 6.3+，或用 `-IsccPath` 指定编译器）：
 
 ```powershell
-.\scripts\package-installer.ps1 -Version 1.0.2
+.\scripts\package-installer.ps1 -Version 1.0.3
 ```
 
 - 脚本重新编译当前应用，不编译或运行测试；与便携版共用正式目录 `build/release/`。
