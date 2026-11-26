@@ -1216,8 +1216,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .note-actions { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 18px; }
 .note-action { min-height: 36px; padding: 8px 10px; color: var(--muted); border-radius: 7px; font-size: 12px; }
 .note-action:hover { background: var(--hover); color: var(--ink); }
-.note-actions > .note-edit-primary { align-self: stretch; min-height: 44px; padding: 10px 16px; background: var(--paper); border: 1px solid var(--line); font-size: 13px; font-weight: 500; color: var(--ink); }
-.note-actions > .note-edit-primary:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 .note-secondary-actions { display: flex; align-items: center; gap: 8px; }
 .note-secondary-actions .icon-button { width: 36px; min-width: 36px; }
 .note-secondary-actions > [data-note-action="pin"] { margin-left: auto; }
@@ -1312,7 +1310,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 @media (max-width: 650px) { .sidebar { padding: 20px 12px 0; } .app { grid-template-columns: 150px minmax(0, 1fr); } .edge-notes .app { grid-template-columns: minmax(0, 1fr); } .notes-heading-actions { gap: 4px; } .notes-heading-actions > .primary { padding: 9px 11px; } #notes-edge-settings > summary > span { display: none; } }
 @media (max-height: 560px) { #note-reader, #note-editor { padding: 16px; } #note-text { height: 42dvh; min-height: 150px; } }
 @media (prefers-reduced-motion: reduce) { .note-card, .edge-notes #scroll { transition: none; animation: none; scroll-behavior: auto; } }
-@media (forced-colors: active) { .note-card, #quick-note-form, #notes-search, .note-edit-primary, .edge-settings-panel { border: 1px solid CanvasText; } .note-check input, .note-todo-option input { appearance: auto; } }
+@media (forced-colors: active) { .note-card, #quick-note-form, #notes-search, .edge-settings-panel { border: 1px solid CanvasText; } .note-check input, .note-todo-option input { appearance: auto; } }
 
 /* A quiet ruled-paper rhythm, shared by previews, reading and the native text input. */
 :root {

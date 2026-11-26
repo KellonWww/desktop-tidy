@@ -256,7 +256,6 @@
       card.append(preview);
       const actions = node("div", "note-actions");
       const copy = button("复制", "复制便签文本", () => request("copyNote", { id: note.Id })); copy.dataset.noteAction = "copy";
-      const edit = button("编辑", "编辑便签", () => openEditor(note)); edit.dataset.noteAction = "edit"; edit.classList.add("note-edit-primary");
       const pin = button(note.IsPinned ? "取消置顶" : "置顶", note.IsPinned ? "取消置顶便签" : "置顶便签", () => request("togglePin", { id: note.Id, revision: note.Updated }));
       iconButton(pin, "pin");
       pin.dataset.noteAction = "pin"; pin.setAttribute("aria-pressed", String(Boolean(note.IsPinned)));
@@ -264,7 +263,7 @@
       iconButton(remove, "trash");
       remove.dataset.noteAction = "delete";
       const secondary = node("div", "note-secondary-actions"); secondary.append(copy, pin, remove);
-      actions.append(edit, secondary); card.append(actions); grid.append(card);
+      actions.append(secondary); card.append(actions); grid.append(card);
     }
     $("notes-completed").hidden = filter !== "all" || Boolean(query) || completed === 0;
     $("notes-completed").textContent = `${showCompleted ? "收起" : "展开"}已完成（${completed}）`;
